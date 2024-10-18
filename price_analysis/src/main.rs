@@ -7,7 +7,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 struct EC2Instance {
     #[serde(rename = "Name")]
-    name: String,
+            name: String,
 
     #[serde(rename = "API Name")]
     api_name: String,
@@ -44,7 +44,7 @@ fn parse_vcpus(vcpus: &str) -> Option<(u32, Option<String>)> {
     let parts: Vec<&str> = vcpus.split_whitespace().collect();
 
     if let Ok(vcpu_count) = parts[0].parse::<u32>() {
-        let burst = if vcpus.contains("burst") {
+            let burst = if vcpus.contains("burst") {
             Some(parts[4..].join(" "))
         } else {
             None
@@ -91,6 +91,34 @@ fn parse_network_performance(network_performance: &str) -> Option<f64> {
     };
 }
 
+fn parse_storage(storage: &str) -> Option<(u32, &str)> {
+    let parts: Vec<&str> = storage.split_whitespace().collect();
+
+    return match parts.len() {
+        3 => {
+            let value = match parts[0].parse::<u32>() {
+                Err(_) => return None,
+                Ok(v) => v
+            };
+            let device = match parts.last() {
+                None => return None,
+                Some(v) => v
+            };
+            Some((value, device))
+
+        },
+        4 => {
+            let value = match parts[0].parse::<u32>() {
+                Err(_) => return None,
+                Ok(v) => v
+            };
+                Some((value, "NVMe"))
+
+        }
+        _ => None,
+    }
+}
+
 fn parse_price(on_demand: &str) -> Option<f64> {
     let parts: Vec<&str> = on_demand.split_whitespace().collect();
 
@@ -104,6 +132,7 @@ fn parse_price(on_demand: &str) -> Option<f64> {
         _ => None,
     };
 }
+
 fn plot_data(instances: &[EC2Instance]) -> Result<(), Box<dyn Error>> {
     let root_area = BitMapBackend::new("ec2_plot.png", (1024, 768)).into_drawing_area();
     root_area.fill(&WHITE)?;
@@ -140,6 +169,46 @@ fn plot_data(instances: &[EC2Instance]) -> Result<(), Box<dyn Error>> {
     root_area.present()?;
     Ok(())
 }
+
+fn plot_cost_per_gb_storage(instances: &[EC2Instance]) -> Result<(), Box<dyn Error>> {
+    let root_area = BitMapBackend::new("cost_per_gb_storage_plot.png", (1024, 768)).into_drawing_area();
+    root_area.fill(&WHITE)?;
+
+    let mut chart = ChartBuilder::on(&root_area)
+        .caption("EC2 Instance Storage Comparsion", ("sans-serif", 50))
+        .margin(10)
+        .x_label_area_size(30)
+        .y_label_area_size(30)
+        .build_cartesian_2d(0.0..100.0, 0.0..100.0)?;
+
+    chart.configure_mesh().draw()?;
+
+    for instance in instances {
+        let (vcpu_count, _burst) = parse_vcpus(&instance.vcpus).unwrap_or((0, None));
+        let memory = parse_memory(&instance.memory).unwrap_or(0.0);
+        let 
+
+        chart.draw_series(PointSeries::of_element(
+            [(vcpu_count as f64, memory)],
+            5,
+            &RED,
+            &|coord, size, color| {
+                EmptyElement::at(coord)
+                    + Circle::new((0, 0), size, ShapeStyle::from(color).filled())
+                    + Text::new(
+                        instance.api_name.clone(),
+                        (5, 0),
+                        ("sans-serif", 15).into_font(),
+                    )
+            },
+        ))?;
+    }
+
+    root_area.present()?;
+    Ok(())
+}
+
+
 
 fn read_csv(file_path: &str) -> Result<Vec<EC2Instance>, Box<dyn Error>> {
     let mut reader = ReaderBuilder::new().delimiter(b',').from_path(file_path)?;
