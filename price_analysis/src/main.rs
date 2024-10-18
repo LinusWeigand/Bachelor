@@ -1,13 +1,13 @@
 use std::error::Error;
 
 use csv::ReaderBuilder;
-use plotters::prelude::*;
+use plotly::{Plot, Scatter};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 struct EC2Instance {
     #[serde(rename = "Name")]
-            name: String,
+    name: String,
 
     #[serde(rename = "API Name")]
     api_name: String,
@@ -19,7 +19,7 @@ struct EC2Instance {
     vcpus: String,
 
     #[serde(rename = "Instance Storage")]
-    instance_storage: String,
+    storage: String,
 
     #[serde(rename = "Network Performance")]
     network_performance: String,
@@ -44,7 +44,7 @@ fn parse_vcpus(vcpus: &str) -> Option<(u32, Option<String>)> {
     let parts: Vec<&str> = vcpus.split_whitespace().collect();
 
     if let Ok(vcpu_count) = parts[0].parse::<u32>() {
-            let burst = if vcpus.contains("burst") {
+        let burst = if vcpus.contains("burst") {
             Some(parts[4..].join(" "))
         } else {
             None
@@ -98,25 +98,41 @@ fn parse_storage(storage: &str) -> Option<(u32, &str)> {
         3 => {
             let value = match parts[0].parse::<u32>() {
                 Err(_) => return None,
-                Ok(v) => v
+                Ok(v) => v,
             };
             let device = match parts.last() {
                 None => return None,
-                Some(v) => v
+                Some(v) => v,
             };
             Some((value, device))
-
-        },
+        }
         4 => {
             let value = match parts[0].parse::<u32>() {
                 Err(_) => return None,
-                Ok(v) => v
+                Ok(v) => v,
             };
-                Some((value, "NVMe"))
-
+            Some((value, "NVMe"))
+        }
+        7 => {
+            let value = match parts[0].parse::<u32>() {
+                Err(_) => return None,
+                Ok(v) => v,
+            };
+            let device = match parts.last() {
+                None => return None,
+                Some(v) => v.strip_suffix(')').unwrap_or(v),
+            };
+            Some((value, device))
+        }
+        8 => {
+            let value = match parts[0].parse::<u32>() {
+                Err(_) => return None,
+                Ok(v) => v,
+            };
+            Some((value, "NVMe"))
         }
         _ => None,
-    }
+    };
 }
 
 fn parse_price(on_demand: &str) -> Option<f64> {
@@ -133,82 +149,38 @@ fn parse_price(on_demand: &str) -> Option<f64> {
     };
 }
 
-fn plot_data(instances: &[EC2Instance]) -> Result<(), Box<dyn Error>> {
-    let root_area = BitMapBackend::new("ec2_plot.png", (1024, 768)).into_drawing_area();
-    root_area.fill(&WHITE)?;
+fn plot_storage_per_dollar(instances: &[EC2Instance]) {
+    let mut plot = Plot::new();
 
-    let mut chart = ChartBuilder::on(&root_area)
-        .caption("EC2 Instance Comparsion", ("sans-serif", 50))
-        .margin(10)
-        .x_label_area_size(30)
-        .y_label_area_size(30)
-        .build_cartesian_2d(0.0..100.0, 0.0..100.0)?;
-
-    chart.configure_mesh().draw()?;
+    let mut x_values: Vec<f64> = Vec::new();
+    let mut y_values: Vec<f64> = Vec::new();
+    let mut hover_texts: Vec<String> = Vec::new();
 
     for instance in instances {
-        let (vcpu_count, _burst) = parse_vcpus(&instance.vcpus).unwrap_or((0, None));
-        let memory = parse_memory(&instance.memory).unwrap_or(0.0);
+        let storage = match parse_storage(&instance.storage) {
+            None => continue,
+            Some(v) => v,
+        };
+        let price = match parse_price(&instance.linux_reserved_cost) {
+            None => continue,
+            Some(v) => v,
+        };
+        let price_per_gb = price / (storage.0 as f64);
 
-        chart.draw_series(PointSeries::of_element(
-            [(vcpu_count as f64, memory)],
-            5,
-            &RED,
-            &|coord, size, color| {
-                EmptyElement::at(coord)
-                    + Circle::new((0, 0), size, ShapeStyle::from(color).filled())
-                    + Text::new(
-                        instance.api_name.clone(),
-                        (5, 0),
-                        ("sans-serif", 15).into_font(),
-                    )
-            },
-        ))?;
+        x_values.push(storage.0 as f64);
+        y_values.push(price_per_gb);
+        hover_texts.push(format!("{} {}", storage.1, &instance.name));
     }
+    let hover_text_refs: Vec<&str> = hover_texts.iter().map(|s| s.as_str()).collect();
 
-    root_area.present()?;
-    Ok(())
+    let scatter = Scatter::new(x_values, y_values)
+        .name("EC2 Instances")
+        .mode(plotly::common::Mode::Markers);
+    // .text(hover_texts);
+
+    plot.add_trace(scatter);
+    plot.show();
 }
-
-fn plot_cost_per_gb_storage(instances: &[EC2Instance]) -> Result<(), Box<dyn Error>> {
-    let root_area = BitMapBackend::new("cost_per_gb_storage_plot.png", (1024, 768)).into_drawing_area();
-    root_area.fill(&WHITE)?;
-
-    let mut chart = ChartBuilder::on(&root_area)
-        .caption("EC2 Instance Storage Comparsion", ("sans-serif", 50))
-        .margin(10)
-        .x_label_area_size(30)
-        .y_label_area_size(30)
-        .build_cartesian_2d(0.0..100.0, 0.0..100.0)?;
-
-    chart.configure_mesh().draw()?;
-
-    for instance in instances {
-        let (vcpu_count, _burst) = parse_vcpus(&instance.vcpus).unwrap_or((0, None));
-        let memory = parse_memory(&instance.memory).unwrap_or(0.0);
-        let 
-
-        chart.draw_series(PointSeries::of_element(
-            [(vcpu_count as f64, memory)],
-            5,
-            &RED,
-            &|coord, size, color| {
-                EmptyElement::at(coord)
-                    + Circle::new((0, 0), size, ShapeStyle::from(color).filled())
-                    + Text::new(
-                        instance.api_name.clone(),
-                        (5, 0),
-                        ("sans-serif", 15).into_font(),
-                    )
-            },
-        ))?;
-    }
-
-    root_area.present()?;
-    Ok(())
-}
-
-
 
 fn read_csv(file_path: &str) -> Result<Vec<EC2Instance>, Box<dyn Error>> {
     let mut reader = ReaderBuilder::new().delimiter(b',').from_path(file_path)?;
@@ -224,5 +196,7 @@ fn read_csv(file_path: &str) -> Result<Vec<EC2Instance>, Box<dyn Error>> {
 
 fn main() {
     let data = read_csv("./ec2.csv").unwrap();
-    let _ = plot_data(data.as_slice());
+    plot_storage_per_dollar(data.as_slice());
+    // let _ = plot_storage_per_dollar(data.as_slice());
+    // let _ = plot_data(data.as_slice());
 }
