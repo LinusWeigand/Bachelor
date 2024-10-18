@@ -1,7 +1,10 @@
 use std::error::Error;
 
 use csv::ReaderBuilder;
-use plotly::{Plot, Scatter};
+use plotly::{
+    common::{HoverInfo, Marker, Mode},
+    Plot, Scatter,
+};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -104,6 +107,7 @@ fn parse_storage(storage: &str) -> Option<(u32, &str)> {
                 None => return None,
                 Some(v) => v,
             };
+
             Some((value, device))
         }
         4 => {
@@ -155,6 +159,7 @@ fn plot_storage_per_dollar(instances: &[EC2Instance]) {
     let mut x_values: Vec<f64> = Vec::new();
     let mut y_values: Vec<f64> = Vec::new();
     let mut hover_texts: Vec<String> = Vec::new();
+    let mut colors: Vec<&str> = Vec::new();
 
     for instance in instances {
         let storage = match parse_storage(&instance.storage) {
@@ -167,16 +172,33 @@ fn plot_storage_per_dollar(instances: &[EC2Instance]) {
         };
         let price_per_gb = price / (storage.0 as f64);
 
+        if price_per_gb > 0.0008 {
+            continue;
+        }
+
         x_values.push(storage.0 as f64);
+
+        println!("Storage: {}", storage.0);
         y_values.push(price_per_gb);
-        hover_texts.push(format!("{} {}", storage.1, &instance.name));
+        hover_texts.push(format!(
+            "{}, {}, {:.8} ",
+            storage.1, &instance.name, price_per_gb
+        ));
+        let color = match storage.1 {
+            "HDD" => "blue",
+            "SSD" => "green",
+            "NVMe" => "red",
+            _ => "gray",
+        };
+        colors.push(color);
     }
-    let hover_text_refs: Vec<&str> = hover_texts.iter().map(|s| s.as_str()).collect();
 
     let scatter = Scatter::new(x_values, y_values)
+        .hover_info(HoverInfo::Text)
+        .hover_text_array(hover_texts)
         .name("EC2 Instances")
-        .mode(plotly::common::Mode::Markers);
-    // .text(hover_texts);
+        .mode(Mode::Markers)
+        .marker(Marker::new().color_array(colors));
 
     plot.add_trace(scatter);
     plot.show();
