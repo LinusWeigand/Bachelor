@@ -2,12 +2,11 @@ use axum::{
     routing::{get},
     Router,
 };
-use std::sync::Arc;
 
-use crate::{handlers::health_checker_handler, AppState};
+use crate::{handlers::{get_parquet_file, health_checker_handler, put_parquet_file}};
 
-pub fn create_router(app_state: Arc<AppState>) -> Router {
+pub fn create_router() -> Router {
     Router::new()
         .route("/api/healthchecker", get(health_checker_handler))
-        .with_state(app_state)
+        .route("/parquet/:file_name", get(get_parquet_file).put(put_parquet_file))
 }
