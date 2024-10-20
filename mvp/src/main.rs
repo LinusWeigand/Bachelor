@@ -1,7 +1,7 @@
 use axum::extract::DefaultBodyLimit;
 
-mod route;
 mod handlers;
+mod route;
 
 const PARQUET_FOLDER: &str = "./parquet_files/";
 

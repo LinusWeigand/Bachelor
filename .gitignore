@@ -4,6 +4,12 @@ price_analysis/**/doc/
 price_analysis/**/.rust-analyzer
 price_analysis/*.out
 
+ec2/target/
+ec2/Cargo.lock
+ec2/**/doc/
+ec2/**/.rust-analyzer
+ec2/*.out
+
 mvp/target/
 mvp/Cargo.lock
 mvp/**/doc/
@@ -17,3 +23,4 @@ mvp/*.out
 *.so
 .dll
 bench/
+.env

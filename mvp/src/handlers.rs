@@ -28,10 +28,13 @@ pub async fn get_parquet_file(
     Path(file_name): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let file_path = PathBuf::from(PARQUET_FOLDER).join(&*file_name);
+    
 
-    if !file_path.exists() {
-        return Err(StatusCode::NOT_FOUND);
-    }
+    match file_path.try_exists() {
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(false) => return Err(StatusCode::NOT_FOUND),
+        Ok(true) => {}
+    };
 
     let file = match File::open(&file_path).await {
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
