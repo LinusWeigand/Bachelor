@@ -11,8 +11,7 @@ use aws_sdk_ec2::{
         allocate_address::AllocateAddressOutput, associate_address::AssociateAddressOutput,
     },
     types::{
-        BlockDeviceMapping, DomainType, EbsBlockDevice, Filter, Image, Instance, InstanceType,
-        IpPermission, IpRange, KeyPairInfo, SecurityGroup, Tag,
+        BlockDeviceMapping, DomainType, EbsBlockDevice, Filter, Image, Instance, InstanceStateName, InstanceType, IpPermission, IpRange, KeyPairInfo, SecurityGroup, Tag
     },
     Client as EC2Client,
 };
@@ -27,6 +26,34 @@ pub struct EC2Impl {
 impl EC2Impl {
     pub fn new(client: EC2Client) -> Self {
         EC2Impl { client }
+    }
+
+
+    //Method added
+    pub async fn get_instance_public_ip(
+        &self,
+        instance_id: &str,
+    ) -> Result<Option<String>, EC2Error> {
+        let response = self
+            .client
+            .describe_instances()
+            .instance_ids(instance_id)
+            .send()
+            .await?;
+
+        let reservations = response.reservations();
+        if let Some(instance) = reservations
+            .iter()
+            .flat_map(|r| r.instances())
+            .find(|i| i.instance_id().unwrap() == instance_id)
+        {
+            return Ok(instance.public_ip_address().map(|ip| ip.to_string()));
+        }
+
+        Err(EC2Error::new(format!(
+            "No public IP found for instance {}",
+            instance_id
+        )))
     }
 
     //Method added
@@ -111,6 +138,49 @@ impl EC2Impl {
         } else {
             Ok(Some(groups[0].clone()))
         }
+    }
+
+    //Method added
+    pub async fn get_instance_id_by_name_if_running(
+        &self,
+        instance_name: &str
+    ) -> Result<Option<String>, EC2Error> {
+        let name_filter = Filter::builder()
+            .name("tag:Name")
+            .values(instance_name)
+            .build();
+
+        let response = self
+            .client
+            .describe_instances()
+            .filters(name_filter)
+            .send()
+            .await?;
+
+            //TODO
+        if let Some(instance) = response
+            .reservations()
+            .iter()
+            .flat_map(|res| res.instances())
+            .find(|instance| {
+                if let Some(state) = instance.state() {
+                    if let Some(state_name) = state.name() {
+                        state_name == &InstanceStateName::Running
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            })
+        {
+            if let Some(instance_id) = instance.instance_id() {
+                return Ok(Some(instance_id.to_string()))
+            }
+        }
+
+
+        Ok(None)
     }
 
     // snippet-start:[ec2.rust.create_key.impl]

@@ -8,29 +8,63 @@ use aws_sdk_ec2::{
 use aws_sdk_ssm::Client as SSMClient;
 use std::{
     error::Error,
-    fs::{self, create_dir_all, Permissions},
+    fs::{self, create_dir_all, OpenOptions, Permissions},
     io::Write,
     net::Ipv4Addr,
+    time::Duration,
 };
 use util::EC2Impl;
 
+const INSTANCE_NAME: &str = "MVP";
+const KEY_PAIR_NAME: &str = "mvp-key-pair";
+const SECURITY_GROUP_NAME: &str = "mvp-security-group";
+
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
-    let region_provider = RegionProviderChain::default_provider().or_else(Region::new("eu-north-1"));
+    let region_provider =
+        RegionProviderChain::default_provider().or_else(Region::new("eu-north-1"));
     let config = aws_config::from_env().region(region_provider).load().await;
-
     let ec2_client = EC2Client::new(&config);
     let ec2 = EC2Impl::new(ec2_client);
 
+    setup_connection(&ec2).await?;
+    // run(&ec2).await?;
+    Ok(())
+}
+
+async fn setup_connection(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
+    let instance_id = ec2
+        .get_instance_id_by_name_if_running(INSTANCE_NAME)
+        .await?
+        .unwrap();
+
+    let ec2_ip = ec2.get_instance_public_ip(&instance_id).await?.unwrap();
+
+    //Configure connect.sh
+    let file_path = "./connect.sh";
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .append(false)
+        .open(file_path)?;
+    writeln!(
+        file,
+        "{}",
+        format!("ssh -i ~/.ssh/{}.pem ec2-user@{}", KEY_PAIR_NAME, ec2_ip)
+    )?;
+    Ok(())
+}
+
+async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
     //Create Security Group
     let security_group = ec2
-        .create_security_group_if_not_exists("mvp-security-group", "Mvp Security Group for SSH")
+        .create_security_group_if_not_exists(SECURITY_GROUP_NAME, "Mvp Security Group for SSH")
         .await?;
     println!("Created Security Group: {:#?}", security_group);
 
     //Create Key Pair
     let key_pair_name = "mvp-key-pair";
-    let (key_pair_info, private_key) = create_key_pair(key_pair_name, &ec2).await?;
+    let (key_pair_info, private_key) = create_key_pair(&ec2).await?;
     println!("Created Key Pair: {:#?}", key_pair_info);
     println!("Private Key Material: \n{}", private_key);
 
@@ -55,24 +89,22 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
             instance_type,
             &key_pair_info,
             vec![&security_group],
-            "MVP",
+            INSTANCE_NAME,
         )
         .await?;
     println!("Launched EC2 instance with ID: {}", instance_id);
-    ec2.wait_for_instance_ready(&instance_id, None).await?;
+    ec2.wait_for_instance_ready(&instance_id, Some(Duration::from_secs(120)))
+        .await?;
     println!("EC2 Instance is ready!");
 
     Ok(())
 }
 
-pub async fn create_key_pair(
-    key_pair_name: &str,
-    ec2: &EC2Impl,
-) -> Result<(KeyPairInfo, String), Box<dyn Error>> {
+async fn create_key_pair(ec2: &EC2Impl) -> Result<(KeyPairInfo, String), Box<dyn Error>> {
     let mut key_pair_id: Option<String> = None;
     let key_pairs = ec2.list_key_pair().await?;
     for key_pair in &key_pairs {
-        if key_pair.key_name == Some(key_pair_name.to_string()) {
+        if key_pair.key_name == Some(KEY_PAIR_NAME.to_string()) {
             if let Some(id) = &key_pair.key_pair_id {
                 key_pair_id = Some(id.clone());
             }
@@ -81,21 +113,21 @@ pub async fn create_key_pair(
     }
     if let Some(id) = key_pair_id {
         match ec2.delete_key_pair(&id).await {
-            Err(e) => println!("Key Pair does not already exist"),
+            Err(e) => println!("Key Pair does not already exist: {:?}", e),
             Ok(_) => println!("Key Pair does already exist: Deleting.."),
         };
     }
-    let (key_pair_info, private_key) = ec2.create_key_pair(key_pair_name.to_string()).await?;
+    let (key_pair_info, private_key) = ec2.create_key_pair(KEY_PAIR_NAME.to_string()).await?;
     Ok((key_pair_info, private_key.to_string()))
 }
 
-pub async fn get_public_ip() -> Result<String, Box<dyn Error>> {
+async fn get_public_ip() -> Result<String, Box<dyn Error>> {
     let response = reqwest::get("https://api.ipify.org").await?;
     let ip_address = response.text().await?;
     Ok(ip_address)
 }
 
-pub fn save_private_key(key_name: &str, private_key: &str) -> Result<(), Box<dyn Error>> {
+fn save_private_key(key_name: &str, private_key: &str) -> Result<(), Box<dyn Error>> {
     let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
     let key_path = home_dir.join(".ssh").join(format!("{}.pem", key_name));
 
@@ -115,7 +147,7 @@ pub fn save_private_key(key_name: &str, private_key: &str) -> Result<(), Box<dyn
     Ok(())
 }
 
-pub async fn get_latest_ami_id() -> Result<String, Box<dyn Error>> {
+async fn get_latest_ami_id() -> Result<String, Box<dyn Error>> {
     let config = aws_config::load_from_env().await;
     let ssm_client = SSMClient::new(&config);
 
