@@ -7,17 +7,14 @@ use aws_sdk_ec2::{
 };
 use aws_sdk_ssm::Client as SSMClient;
 use std::{
-    error::Error,
-    fs::{self, create_dir_all, OpenOptions, Permissions},
-    io::Write,
-    net::Ipv4Addr,
-    time::Duration,
+    error::Error, fs::{self, create_dir_all, OpenOptions, Permissions}, io::Write, net::Ipv4Addr, thread, time::Duration
 };
 use util::EC2Impl;
 
 const INSTANCE_NAME: &str = "MVP";
 const KEY_PAIR_NAME: &str = "mvp-key-pair";
 const SECURITY_GROUP_NAME: &str = "mvp-security-group";
+const SSM_ROLE_NAME: &str = "EC2SSMRole";
 
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
@@ -27,8 +24,8 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let ec2_client = EC2Client::new(&config);
     let ec2 = EC2Impl::new(ec2_client);
 
+    run(&ec2).await?;
     setup_connection(&ec2).await?;
-    // run(&ec2).await?;
     Ok(())
 }
 
@@ -71,12 +68,14 @@ async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
     //Save Private Key
     save_private_key(&key_pair_name, &private_key)?;
 
-    //Add SSH Security Rule
+    //Open Ports 22 and 8000
     let public_ip = get_public_ip().await?;
     println!("Public Ip: {}", public_ip);
     let ingress_ip: Ipv4Addr = public_ip.parse().unwrap();
     let cidr_ip = format!("{}/32", ingress_ip);
-    ec2.add_ssh_ingress_rule_if_not_exists(&security_group.group_id().unwrap(), ingress_ip)
+    ec2.add_ingress_rule_if_not_exists(&security_group.group_id().unwrap(), ingress_ip, 22)
+        .await?;
+    ec2.add_ingress_rule_if_not_exists(&security_group.group_id().unwrap(), ingress_ip, 8000)
         .await?;
     println!("Authorized SSH ingress from IP: {}", cidr_ip);
 
@@ -90,11 +89,13 @@ async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
             &key_pair_info,
             vec![&security_group],
             INSTANCE_NAME,
+            Some(SSM_ROLE_NAME),
         )
         .await?;
     println!("Launched EC2 instance with ID: {}", instance_id);
-    ec2.wait_for_instance_ready(&instance_id, Some(Duration::from_secs(120)))
-        .await?;
+    // ec2.wait_for_instance_ready(&instance_id, Some(Duration::from_secs(120)))
+    //     .await?;
+    thread::sleep(Duration::from_secs(20));
     println!("EC2 Instance is ready!");
 
     Ok(())
@@ -160,4 +161,42 @@ async fn get_latest_ami_id() -> Result<String, Box<dyn Error>> {
 
     let ami_id = ami_param.parameter.unwrap().value.unwrap();
     Ok(ami_id)
+}
+
+async fn setup_instance_via_ssm(
+    ssm_client: &SSMClient,
+    instance_id: &str,
+) -> Result<(), Box<dyn Error>> {
+    let binary_url = "https://github.com/LinusWeigand/Bachelor/releases/download/mvp-1.0.0/mvp";
+    let wget_command = format!("wget {} -O ~/mvp", binary_url);
+
+    let commands = vec![
+        "sudo yum update -y",
+        "sudo yum install -y wget",
+        wget_command.as_str(),
+        "chmod +x ~/mvp",
+        "~/mvp",
+    ];
+
+    let document_name = "AWS-RunShellScript";
+
+    let send_command_output = ssm_client
+        .send_command()
+        .instance_ids(instance_id)
+        .document_name(document_name)
+        .parameters("commands", commands.iter().map(|s| s.to_string()).collect())
+        .send()
+        .await?;
+
+    let command_id = send_command_output
+        .command()
+        .and_then(|cmd| cmd.command_id())
+        .ok_or("Failed to get command ID")?;
+
+    println!("Sent SSM command with ID: {}", command_id);
+
+    // Optionally, wait for command to complete and check the status
+    // You can implement a waiter or poll the command status
+
+    Ok(())
 }

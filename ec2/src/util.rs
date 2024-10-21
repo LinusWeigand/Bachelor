@@ -8,10 +8,10 @@ use aws_sdk_ec2::{
     client::Waiters,
     error::ProvideErrorMetadata,
     operation::{
-        allocate_address::AllocateAddressOutput, associate_address::AssociateAddressOutput,
+        allocate_address::AllocateAddressOutput, associate_address::AssociateAddressOutput, run_instances,
     },
     types::{
-        BlockDeviceMapping, DomainType, EbsBlockDevice, Filter, Image, Instance, InstanceStateName, InstanceType, IpPermission, IpRange, KeyPairInfo, SecurityGroup, Tag
+        BlockDeviceMapping, DomainType, EbsBlockDevice, Filter, IamInstanceProfileSpecification, Image, Instance, InstanceStateName, InstanceType, IpPermission, IpRange, KeyPairInfo, SecurityGroup, Tag
     },
     Client as EC2Client,
 };
@@ -57,42 +57,27 @@ impl EC2Impl {
     }
 
     //Method added
-    pub async fn add_ssh_ingress_rule_if_not_exists(
+    pub async fn add_ingress_rule_if_not_exists(
         &self,
         group_id: &str,
         ingress_ip: Ipv4Addr,
+        port: i32,
     ) -> Result<(), EC2Error> {
-        let describe_output = self
-            .client
-            .describe_security_groups()
-            .group_ids(group_id)
-            .send()
-            .await?;
-        let mut security_group_exists = false;
-        let security_groups = describe_output.security_groups();
-        if let Some(security_group) = security_groups.first() {
-            for permission in security_group.ip_permissions() {
-                if Some(22) == permission.from_port()
-                    && Some(22) == permission.to_port()
-                    && Some("tcp") == permission.ip_protocol().as_deref()
-                {
-                    for range in permission.ip_ranges() {
-                        if range.cidr_ip().as_deref() == Some(&format!("{}/32", ingress_ip)) {
-                            security_group_exists = true;
-                        }
-                    }
-                }
+            return match self.authorize_security_group_ingress(group_id, vec![ingress_ip], port)
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => {
+            let error_message = e.to_string(); 
+
+            if error_message.contains("InvalidPermission.Duplicate") {
+                println!("The rule already exists. Skipping...");
+                Ok(())
+            } else {
+                Err(e)
+            }
             }
         }
-
-        if security_group_exists {
-            println!("SSH ingress rule already exists");
-            return Ok(());
-        }
-
-        self.authorize_security_group_ssh_ingress(group_id, vec![ingress_ip])
-            .await?;
-        Ok(())
     }
 
     //Method added
@@ -157,7 +142,6 @@ impl EC2Impl {
             .send()
             .await?;
 
-            //TODO
         if let Some(instance) = response
             .reservations()
             .iter()
@@ -178,8 +162,6 @@ impl EC2Impl {
                 return Ok(Some(instance_id.to_string()))
             }
         }
-
-
         Ok(None)
     }
 
@@ -281,10 +263,12 @@ impl EC2Impl {
     // snippet-start:[ec2.rust.authorize_security_group_ssh_ingress.impl]
     /// Add an ingress rule to a security group explicitly allowing IPv4 address
     /// as {ip}/32 over TCP port 22.
-    pub async fn authorize_security_group_ssh_ingress(
+    // Modified
+    pub async fn authorize_security_group_ingress(
         &self,
         group_id: &str,
         ingress_ips: Vec<Ipv4Addr>,
+        port: i32,
     ) -> Result<(), EC2Error> {
         tracing::info!("Authorizing ingress for security group {group_id}");
         self.client
@@ -296,8 +280,8 @@ impl EC2Impl {
                     .map(|ip| {
                         IpPermission::builder()
                             .ip_protocol("tcp")
-                            .from_port(22)
-                            .to_port(22)
+                            .from_port(port)
+                            .to_port(port)
                             .ip_ranges(IpRange::builder().cidr_ip(format!("{ip}/32")).build())
                             .build()
                     })
@@ -384,6 +368,7 @@ impl EC2Impl {
         key_pair: &'a KeyPairInfo,
         security_groups: Vec<&'a SecurityGroup>,
         name: &str,
+        iam_instance_profile: Option<&str>,
     ) -> Result<String, EC2Error> {
         let ebs_volumes = vec![
             BlockDeviceMapping::builder()
@@ -415,7 +400,7 @@ impl EC2Impl {
                 .build(),
         ];
 
-        let run_instances = self
+        let mut run_instances_builder = self
             .client
             .run_instances()
             .image_id(image_id)
@@ -433,9 +418,16 @@ impl EC2Impl {
             ))
             .set_block_device_mappings(Some(ebs_volumes))
             .min_count(1)
-            .max_count(1)
-            .send()
-            .await?;
+            .max_count(1);
+
+        if let Some(profile_name) = iam_instance_profile {
+            let iam_instance_profile = IamInstanceProfileSpecification::builder()
+                .name(profile_name)
+                .build();
+            run_instances_builder = run_instances_builder.iam_instance_profile(iam_instance_profile);
+        }
+
+        let run_instances = run_instances_builder.send().await?;
 
         if run_instances.instances().is_empty() {
             return Err(EC2Error::new("Failed to create instance"));
