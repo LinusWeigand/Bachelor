@@ -11,8 +11,8 @@ use aws_sdk_ec2::{
         allocate_address::AllocateAddressOutput, associate_address::AssociateAddressOutput,
     },
     types::{
-        DomainType, Filter, Image, Instance, InstanceType, IpPermission, IpRange, KeyPairInfo,
-        SecurityGroup, Tag,
+        BlockDeviceMapping, DomainType, EbsBlockDevice, Filter, Image, Instance, InstanceType,
+        IpPermission, IpRange, KeyPairInfo, SecurityGroup, Tag,
     },
     Client as EC2Client,
 };
@@ -315,6 +315,36 @@ impl EC2Impl {
         security_groups: Vec<&'a SecurityGroup>,
         name: &str,
     ) -> Result<String, EC2Error> {
+        let ebs_volumes = vec![
+            BlockDeviceMapping::builder()
+                .device_name("/dev/xvda")
+                .ebs(
+                    EbsBlockDevice::builder()
+                        .volume_size(8)
+                        .volume_type(aws_sdk_ec2::types::VolumeType::Standard)
+                        .build(),
+                )
+                .build(),
+            BlockDeviceMapping::builder()
+                .device_name("/dev/xvdb")
+                .ebs(
+                    EbsBlockDevice::builder()
+                        .volume_size(125)
+                        .volume_type(aws_sdk_ec2::types::VolumeType::Sc1)
+                        .build(),
+                )
+                .build(),
+            BlockDeviceMapping::builder()
+                .device_name("/dev/xvdc")
+                .ebs(
+                    EbsBlockDevice::builder()
+                        .volume_size(1)
+                        .volume_type(aws_sdk_ec2::types::VolumeType::Standard)
+                        .build(),
+                )
+                .build(),
+        ];
+
         let run_instances = self
             .client
             .run_instances()
@@ -331,6 +361,7 @@ impl EC2Impl {
                     .filter_map(|sg| sg.group_id.clone())
                     .collect(),
             ))
+            .set_block_device_mappings(Some(ebs_volumes))
             .min_count(1)
             .max_count(1)
             .send()

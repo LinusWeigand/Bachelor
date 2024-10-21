@@ -1,27 +1,78 @@
 mod util;
 
-use aws_sdk_ec2::{types::InstanceType, Client as EC2Client};
+use aws_config::{meta::region::RegionProviderChain, Region};
+use aws_sdk_ec2::{
+    types::{InstanceType, KeyPairInfo},
+    Client as EC2Client,
+};
 use aws_sdk_ssm::Client as SSMClient;
-use util::EC2Impl;
 use std::{
     error::Error,
     fs::{self, create_dir_all, Permissions},
     io::Write,
-    net::{Ipv4Addr},
+    net::Ipv4Addr,
 };
-
+use util::EC2Impl;
 
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
-    let config = aws_config::load_from_env().await;
+    let region_provider = RegionProviderChain::default_provider().or_else(Region::new("eu-north-1"));
+    let config = aws_config::from_env().region(region_provider).load().await;
+
     let ec2_client = EC2Client::new(&config);
     let ec2 = EC2Impl::new(ec2_client);
 
-    let key_pair_name = "mvp-key-pair".to_string();
+    //Create Security Group
+    let security_group = ec2
+        .create_security_group_if_not_exists("mvp-security-group", "Mvp Security Group for SSH")
+        .await?;
+    println!("Created Security Group: {:#?}", security_group);
+
+    //Create Key Pair
+    let key_pair_name = "mvp-key-pair";
+    let (key_pair_info, private_key) = create_key_pair(key_pair_name, &ec2).await?;
+    println!("Created Key Pair: {:#?}", key_pair_info);
+    println!("Private Key Material: \n{}", private_key);
+
+    //Save Private Key
+    save_private_key(&key_pair_name, &private_key)?;
+
+    //Add SSH Security Rule
+    let public_ip = get_public_ip().await?;
+    println!("Public Ip: {}", public_ip);
+    let ingress_ip: Ipv4Addr = public_ip.parse().unwrap();
+    let cidr_ip = format!("{}/32", ingress_ip);
+    ec2.add_ssh_ingress_rule_if_not_exists(&security_group.group_id().unwrap(), ingress_ip)
+        .await?;
+    println!("Authorized SSH ingress from IP: {}", cidr_ip);
+
+    //Create Instance
+    let ami_id = get_latest_ami_id().await?;
+    let instance_type = InstanceType::T4gNano;
+    let instance_id = ec2
+        .create_instance(
+            ami_id.as_str(),
+            instance_type,
+            &key_pair_info,
+            vec![&security_group],
+            "MVP",
+        )
+        .await?;
+    println!("Launched EC2 instance with ID: {}", instance_id);
+    ec2.wait_for_instance_ready(&instance_id, None).await?;
+    println!("EC2 Instance is ready!");
+
+    Ok(())
+}
+
+pub async fn create_key_pair(
+    key_pair_name: &str,
+    ec2: &EC2Impl,
+) -> Result<(KeyPairInfo, String), Box<dyn Error>> {
     let mut key_pair_id: Option<String> = None;
     let key_pairs = ec2.list_key_pair().await?;
     for key_pair in &key_pairs {
-        if key_pair.key_name == Some(key_pair_name.clone()) {
+        if key_pair.key_name == Some(key_pair_name.to_string()) {
             if let Some(id) = &key_pair.key_pair_id {
                 key_pair_id = Some(id.clone());
             }
@@ -34,39 +85,9 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
             Ok(_) => println!("Key Pair does already exist: Deleting.."),
         };
     }
-    let (key_pair_info, private_key) = ec2.create_key_pair(key_pair_name.clone()).await?;
-    println!("Created Key Pair: {:#?}", key_pair_info);
-    println!("Private Key Material: \n{}", private_key);
-    save_private_key(&key_pair_name, &private_key)?;
-
-    let security_group = ec2
-        .create_security_group_if_not_exists("mvp-security-group", "Mvp Security Group for SSH")
-        .await?;
-    println!("Created Security Group: {:#?}", security_group);
-
-    let public_ip = get_public_ip().await?;
-    println!("Public Ip: {}", public_ip);
-
-
-    let ingress_ip: Ipv4Addr = public_ip.parse().unwrap();
-    let cidr_ip = format!("{}/32", ingress_ip);
-    ec2.add_ssh_ingress_rule_if_not_exists(&security_group.group_id().unwrap(), ingress_ip)
-        .await?;
-    println!("Authorized SSH ingress from IP: {}", cidr_ip);
-
-    let ami_id = get_latest_ami_id().await?;
-    let instance_type = InstanceType::T4gNano;
-    let instance_id = ec2
-        .create_instance(ami_id.as_str(), instance_type, &key_pair_info, vec![&security_group], "MVP")
-        .await?;
-
-    println!("Launched EC2 instance with ID: {}", instance_id);
-    ec2.wait_for_instance_ready(&instance_id, None).await?;
-    println!("EC2 Instance is ready!");
-
-    Ok(())
+    let (key_pair_info, private_key) = ec2.create_key_pair(key_pair_name.to_string()).await?;
+    Ok((key_pair_info, private_key.to_string()))
 }
-
 
 pub async fn get_public_ip() -> Result<String, Box<dyn Error>> {
     let response = reqwest::get("https://api.ipify.org").await?;
@@ -94,7 +115,6 @@ pub fn save_private_key(key_name: &str, private_key: &str) -> Result<(), Box<dyn
     Ok(())
 }
 
-
 pub async fn get_latest_ami_id() -> Result<String, Box<dyn Error>> {
     let config = aws_config::load_from_env().await;
     let ssm_client = SSMClient::new(&config);
@@ -109,4 +129,3 @@ pub async fn get_latest_ami_id() -> Result<String, Box<dyn Error>> {
     let ami_id = ami_param.parameter.unwrap().value.unwrap();
     Ok(ami_id)
 }
-
