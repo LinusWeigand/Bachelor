@@ -194,7 +194,5 @@ async fn setup_instance_via_ssm(
         .ok_or("Failed to get command ID")?;
 
     println!("Sent SSM command with ID: {}", command_id);
-
-
     Ok(())
 }

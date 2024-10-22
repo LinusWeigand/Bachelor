@@ -1,4 +1,4 @@
-# Steps required to execute this
+# Steps required to execute this program
 
 ## 1. Aws sdk needs access to your account:
 - Create user in the aws console
