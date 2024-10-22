@@ -1,3 +1,5 @@
+use csv::Writer;
+use reqwest::blocking::Client;
 use scraper::{Html, Selector};
 use std::error::Error;
 use std::fs::File;
@@ -34,6 +36,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         "Maximum IOPS (16 KiB I/O)",
     ])?;
 
+    let mut counter = 20;
+
     for row in document.select(&row_selector) {
         let data_selector = Selector::parse("td").unwrap();
         let mut row_data = Vec::new();
@@ -43,8 +47,31 @@ fn main() -> Result<(), Box<dyn Error>> {
             row_data.push(text);
         }
 
+        if counter < 40 {
+            println!("Row_data length: {}", row_data.len());
+        }
+        counter += 1;
+        if row_data.len() > 0 {
+            row_data[0] = row_data[0]
+                .strip_suffix('1')
+                .unwrap_or(row_data[0].as_str())
+                .trim()
+                .to_string();
+        }
+
         if row_data.len() == 7 {
             wtr.write_record(&row_data)?;
+        }
+
+        if row_data.len() == 4 {
+            let mut new_row_data = Vec::new();
+            new_row_data.push(&row_data[0]);
+            new_row_data.push(&row_data[1]);
+            new_row_data.push(&row_data[1]);
+            new_row_data.push(&row_data[2]);
+            new_row_data.push(&row_data[2]);
+            new_row_data.push(&row_data[3]);
+            new_row_data.push(&row_data[3]);
         }
     }
 
