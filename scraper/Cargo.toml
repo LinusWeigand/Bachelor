@@ -1,0 +1,10 @@
+[package]
+name = "scraper"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+csv = "1.3.0"
+reqwest = { version = "0.11", features = ["blocking", "rustls-tls"] }
+scraper = "0.13"
+tokio = { version = "1", features = ["full"] }

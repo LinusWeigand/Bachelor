@@ -10,6 +10,12 @@ ec2/**/doc/
 ec2/**/.rust-analyzer
 ec2/*.out
 
+scraper/target/
+scraper/Cargo.lock
+scraper/**/doc/
+scraper/**/.rust-analyzer
+scraper/*.out
+
 mvp/target/
 mvp/Cargo.lock
 mvp/**/doc/

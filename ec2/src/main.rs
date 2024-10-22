@@ -195,8 +195,6 @@ async fn setup_instance_via_ssm(
 
     println!("Sent SSM command with ID: {}", command_id);
 
-    // Optionally, wait for command to complete and check the status
-    // You can implement a waiter or poll the command status
 
     Ok(())
 }
