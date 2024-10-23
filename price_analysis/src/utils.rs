@@ -226,7 +226,7 @@ impl Data {
             };
             data_points.push((
                 format!("{} {}", instance.api_name.clone(), storage.1),
-                price /(storage.0 as f64) ,
+                price / (storage.0 as f64),
             ));
         }
         data_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
@@ -248,5 +248,46 @@ impl Data {
         }
         data_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         data_points
+    }
+
+    pub fn get_efficient_frontier(&self) -> Vec<(String, f64, f64)> {
+
+        let mut combinations = Vec::new();
+        let storage = 100_000;
+        for instance in &self.instances {
+            let baseline_throughput = match instance.baseline_throughput {
+                None => continue,
+                Some(v) => v,
+            };
+            let price = match parse_price(&instance.linux_reserved_cost) {
+                None => continue,
+                Some(v) => hourly_to_monthly(v),
+            };
+            //TODO handle Instances with Storage
+            // let instance_storage = match parse_storage(&instance.storage) {
+            //     None => 0,
+            //     Some((v, _)) => v,
+            // };
+
+            for i in (125..16_000).step_by(100) {
+                let disk_count = (storage as f64 / i as f64).ceil() as u32;
+
+                let min_instances = (disk_count as f64 / 40.).ceil() as u32;
+                let total_cost_per_month = 100_000. * 0.01596 + min_instances as f64 * price;
+                let max_throughput_per_disk = 250.;
+                let disk_throughput: f64 = max_throughput_per_disk * disk_count as f64;
+                let instance_throughput: f64 = baseline_throughput * min_instances as f64;
+                let throughput: f64 = f64::min(disk_throughput, instance_throughput);
+                if throughput.is_nan() || throughput.is_infinite() {
+                    continue;
+                }
+                combinations.push((
+                    format!("{} sc1 disks, {} {}", disk_count, min_instances, &instance.name),
+                    total_cost_per_month,
+                    throughput,
+                ));
+            }
+        }
+        combinations
     }
 }

@@ -1,3 +1,4 @@
+use charming::component::FilterMode;
 use charming::df;
 use charming::element::ItemStyle;
 use charming::{component::DataZoom, datatype::DataPointItem, element::Formatter};
@@ -33,21 +34,36 @@ fn get_scatter_throughput_chart(data: &Data) -> String {
         .data_zoom(DataZoom::new().x_axis_index(0).y_axis_index(0))
         .series(
             Scatter::new().symbol_size(10).data(
-                data
-                    .into_iter()
+                data.into_iter()
                     .map(|(label, x, y)| DataPointItem::new(vec![x, y]).name(label))
                     .collect::<Vec<_>>(),
             ),
         );
-    let options =
-        serde_json::to_string(&chart).unwrap_or_else(|_| "{}".to_string());
+    let options = serde_json::to_string(&chart).unwrap_or_else(|_| "{}".to_string());
+    options
+}
+
+fn get_scatter_efficient_frontier(data: &Data) -> String {
+    let data = data.get_efficient_frontier();
+    let chart = Chart::new()
+        .x_axis(Axis::new().name("Total Cost Per Month"))
+        .y_axis(Axis::new().name("Baseline Throughput (Mbps)"))
+        .tooltip(Tooltip::new().formatter(Formatter::String("{b}: ({c0})".into())))
+        .data_zoom(DataZoom::new().x_axis_index(0).y_axis_index(0))
+        .series(
+            Scatter::new().symbol_size(10).data(
+                data.into_iter()
+                    .map(|(label, x, y)| DataPointItem::new(vec![x, y]).name(label))
+                    .collect::<Vec<_>>(),
+            ),
+        );
+    let options = serde_json::to_string(&chart).unwrap_or_else(|_| "{}".to_string());
     options
 }
 
 fn get_bar_throughput_chart(data: &Data) -> String {
     let data = data.get_cost_per_throughput();
-    let (names, values): (Vec<String>, Vec<f64>) =
-        data.into_iter().map(|(s, f)| (s, f)).unzip();
+    let (names, values): (Vec<String>, Vec<f64>) = data.into_iter().map(|(s, f)| (s, f)).unzip();
     let chart = Chart::new()
         .x_axis(
             Axis::new()
@@ -58,10 +74,18 @@ fn get_bar_throughput_chart(data: &Data) -> String {
         .y_axis(
             Axis::new()
                 .type_(AxisType::Value)
-                .name("Baseline Throughput per Dollar (Mbps)"),
+                .name("Baseline Throughput Per Dollar (Mbps)")
+                .scale(true),
         )
         .tooltip(Tooltip::new())
-        .data_zoom(DataZoom::new().x_axis_index(0).y_axis_index(0))
+        .data_zoom(
+            DataZoom::new()
+                .x_axis_index(0)
+                .y_axis_index(0)
+                .filter_mode(FilterMode::None)
+                .start(0)
+                .end(100),
+        )
         .series(Bar::new().data(values));
 
     let options = serde_json::to_string(&chart).unwrap_or_else(|_| "{}".to_string());
@@ -69,12 +93,22 @@ fn get_bar_throughput_chart(data: &Data) -> String {
 }
 
 fn get_bar_ebs_chart() -> String {
-    let chart =     Chart::new()
+    let chart = Chart::new()
         .x_axis(
             Axis::new()
                 .type_(AxisType::Category)
                 .name("Name")
-                .data(vec!["Io1", "Io2", "Gp2", "Gp3", "St1", "S3 bis 50TB", "S3 weitere 450TB", "S3 ab 500TB", "Sc1"]),
+                .data(vec![
+                    "Io1",
+                    "Io2",
+                    "Gp2",
+                    "Gp3",
+                    "St1",
+                    "S3 bis 50TB",
+                    "S3 weitere 450TB",
+                    "S3 ab 500TB",
+                    "Sc1",
+                ]),
         )
         .y_axis(Axis::new().type_(AxisType::Value).name("Cost per GB"))
         .tooltip(Tooltip::new())
@@ -95,11 +129,9 @@ fn get_bar_ebs_chart() -> String {
     options
 }
 
-
 fn get_bar_storage_chart(data: &Data) -> String {
     let data = data.get_cost_per_gb();
-    let (names, values): (Vec<String>, Vec<f64>) =
-        data.into_iter().map(|(s, f)| (s, f)).unzip();
+    let (names, values): (Vec<String>, Vec<f64>) = data.into_iter().map(|(s, f)| (s, f)).unzip();
     let chart = Chart::new()
         .x_axis(
             Axis::new()
@@ -107,11 +139,7 @@ fn get_bar_storage_chart(data: &Data) -> String {
                 .name("EC2 Instance Type")
                 .data(names),
         )
-        .y_axis(
-            Axis::new()
-                .type_(AxisType::Value)
-                .name("Storage (GB)"),
-        )
+        .y_axis(Axis::new().type_(AxisType::Value).name("Storage (GB)"))
         .tooltip(Tooltip::new())
         .data_zoom(DataZoom::new().x_axis_index(0).y_axis_index(0))
         .series(Bar::new().data(values));
@@ -126,6 +154,7 @@ async fn index() -> impl IntoResponse {
     let bar_throughput_options = get_bar_throughput_chart(&data);
     let bar_storage_options = get_bar_storage_chart(&data);
     let ebs_options = get_bar_ebs_chart();
+    let scatter_efficient_frontier = get_scatter_efficient_frontier(&data);
 
     let combined_html = format!(
         r#"
@@ -149,17 +178,27 @@ async fn index() -> impl IntoResponse {
                     text-align: center;
                     font-family: Arial, sans-serif;
                 }}
+                p {{
+                    text-align: left;
+                    font-family: Arial, sans-serif;
+                    text-size: 15px;
+                    margin-top: 50px;
+                }}
             </style>
         </head>
         <body>
             <h1>Throughput and Price</h1>
             <div id="chart1-container" class="chart-container"></div>
-            <h1>Throughput per Dollar</h1>
+            <h1>Throughput per Dollar (1 MB/s)</h1>
             <div id="chart2-container" class="chart-container"></div>
             <h1>EC2 Cost per GB</h1>
             <div id="chart3-container" class="chart-container"></div>
             <h1>EBS Cost per GB</h1>
             <div id="chart4-container" class="chart-container"></div>
+            <h1>Throughput & Cost Efficient Frontier</h1>
+            <div id="chart5-container" class="chart-container"></div>
+            
+
             <script>
                 var chart1 = echarts.init(document.getElementById('chart1-container'));
                 var options1 = {scatter_options};
@@ -177,12 +216,17 @@ async fn index() -> impl IntoResponse {
                 var options4 = {ebs_options};
                 chart4.setOption(options4);
 
+                var chart5 = echarts.init(document.getElementById('chart5-container'));
+                var options5 = {scatter_efficient_frontier};
+                chart5.setOption(options5);
+
                 // Resize charts when window size changes
                 window.addEventListener('resize', function() {{
                     chart1.resize();
                     chart2.resize();
                     chart3.resize();
                     chart4.resize();
+                    chart5.resize();
                 }});
             </script>
         </body>
