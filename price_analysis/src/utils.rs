@@ -1,10 +1,6 @@
-use std::{error::Error, fs::File};
+use std::error::Error;
 
-use csv::{ReaderBuilder, Writer};
-use plotly::{
-    common::{HoverInfo, Marker, Mode},
-    Plot, Scatter,
-};
+use csv::ReaderBuilder;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -171,8 +167,15 @@ fn parse_price(on_demand: &str) -> Option<f64> {
     };
 }
 
+fn hourly_to_monthly(hourly: f64) -> f64 {
+    hourly * 24. * 30.432098765432099
+}
+
 fn read_csv(file_path: &str) -> Result<Vec<EC2Instance>, Box<dyn Error>> {
-    let mut reader = ReaderBuilder::new().delimiter(b',').from_path(file_path)?;
+    let mut reader = ReaderBuilder::new()
+        .delimiter(b',')
+        .flexible(true)
+        .from_path(file_path)?;
     let mut instances: Vec<EC2Instance> = Vec::new();
 
     for result in reader.deserialize() {
@@ -198,7 +201,7 @@ impl Data {
         for instance in &self.instances {
             let price = match parse_price(&instance.linux_reserved_cost) {
                 None => continue,
-                Some(v) => v,
+                Some(v) => hourly_to_monthly(v),
             };
             let baseline_throughput = match instance.baseline_throughput {
                 None => continue,
@@ -206,6 +209,44 @@ impl Data {
             };
             data_points.push((instance.api_name.clone(), price, baseline_throughput));
         }
+        data_points
+    }
+
+    pub fn get_cost_per_gb(&self) -> Vec<(String, f64)> {
+        let mut data_points: Vec<(String, f64)> = Vec::new();
+        for instance in &self.instances {
+            let price = match parse_price(&instance.linux_reserved_cost) {
+                None => continue,
+                Some(v) => hourly_to_monthly(v),
+            };
+
+            let storage = match parse_storage(&instance.storage) {
+                None => continue,
+                Some(v) => v,
+            };
+            data_points.push((
+                format!("{} {}", instance.api_name.clone(), storage.1),
+                price /(storage.0 as f64) ,
+            ));
+        }
+        data_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        data_points
+    }
+
+    pub fn get_cost_per_throughput(&self) -> Vec<(String, f64)> {
+        let mut data_points: Vec<(String, f64)> = Vec::new();
+        for instance in &self.instances {
+            let price = match parse_price(&instance.linux_reserved_cost) {
+                None => continue,
+                Some(v) => hourly_to_monthly(v),
+            };
+            let baseline_throughput = match instance.baseline_throughput {
+                None => continue,
+                Some(v) => v,
+            };
+            data_points.push((instance.api_name.clone(), baseline_throughput / price));
+        }
+        data_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         data_points
     }
 }
