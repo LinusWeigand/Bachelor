@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let row_selector = Selector::parse("tr").unwrap();
 
-    let file = File::create("aws_ebs_data.csv")?;
+    let file = File::create("scraped_data.csv")?;
     let mut wtr = Writer::from_writer(file);
 
     wtr.write_record(&[
@@ -36,8 +36,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         "Maximum IOPS (16 KiB I/O)",
     ])?;
 
-    let mut counter = 20;
-
     for row in document.select(&row_selector) {
         let data_selector = Selector::parse("td").unwrap();
         let mut row_data = Vec::new();
@@ -47,10 +45,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             row_data.push(text);
         }
 
-        if counter < 40 {
-            println!("Row_data length: {}", row_data.len());
-        }
-        counter += 1;
         if row_data.len() > 0 {
             row_data[0] = row_data[0]
                 .strip_suffix('1')

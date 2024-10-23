@@ -384,7 +384,7 @@ impl EC2Impl {
                 .device_name("/dev/xvdb")
                 .ebs(
                     EbsBlockDevice::builder()
-                        .volume_size(125)
+                        .volume_size(120)
                         .volume_type(aws_sdk_ec2::types::VolumeType::Sc1)
                         .build(),
                 )
