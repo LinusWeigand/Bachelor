@@ -10,8 +10,9 @@ use axum::{
     routing::get,
     Router,
 };
-use charming::{component::Axis, element::Tooltip, series::Scatter, Chart, HtmlRenderer};
+use charming::{component::Axis, element::Tooltip, series::Scatter, Chart};
 use tokio::main;
+use tower_http::compression::CompressionLayer;
 use utils::Data;
 mod utils;
 
@@ -19,7 +20,12 @@ mod utils;
 async fn main() {
     println!("Runinng: http://127.0.0.1:5555");
 
-    let app = Router::new().route("/", get(index));
+    let compression_layer = CompressionLayer::new()
+        .br(true)
+        .gzip(true)
+        .deflate(true);
+    let app = Router::new().route("/", get(index))
+        .layer(compression_layer);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:5555").await.unwrap();
     axum::serve(listener, app).await.unwrap();
@@ -39,7 +45,7 @@ fn get_scatter_throughput_chart(data: &Data) -> String {
                     .collect::<Vec<_>>(),
             ),
         );
-    let options = serde_json::to_string(&chart).unwrap_or_else(|_| "{}".to_string());
+    let options = serde_json::to_string(&chart).unwrap_or_default();
     options
 }
 
@@ -49,7 +55,10 @@ fn get_scatter_efficient_frontier(data: &Data) -> String {
         .x_axis(Axis::new().name("Total Cost Per Month"))
         .y_axis(Axis::new().name("Baseline Throughput (Mbps)"))
         .tooltip(Tooltip::new().formatter(Formatter::String("{b}: ({c0})".into())))
-        .data_zoom(DataZoom::new().x_axis_index(0).y_axis_index(0))
+        .data_zoom(DataZoom::new()
+            .x_axis_index(0)
+            .y_axis_index(0)
+            .realtime(true))
         .series(
             Scatter::new().symbol_size(10).data(
                 data.into_iter()
@@ -57,7 +66,7 @@ fn get_scatter_efficient_frontier(data: &Data) -> String {
                     .collect::<Vec<_>>(),
             ),
         );
-    let options = serde_json::to_string(&chart).unwrap_or_else(|_| "{}".to_string());
+    let options = serde_json::to_string(&chart).unwrap_or_default();
     options
 }
 
@@ -88,7 +97,7 @@ fn get_bar_throughput_chart(data: &Data) -> String {
         )
         .series(Bar::new().data(values));
 
-    let options = serde_json::to_string(&chart).unwrap_or_else(|_| "{}".to_string());
+    let options = serde_json::to_string(&chart).unwrap_or_default();
     options
 }
 
@@ -125,7 +134,7 @@ fn get_bar_ebs_chart() -> String {
             0.01596,
         ]));
 
-    let options = serde_json::to_string(&chart).unwrap_or_else(|_| "{}".to_string());
+    let options = serde_json::to_string(&chart).unwrap_or_default();
     options
 }
 
@@ -144,12 +153,13 @@ fn get_bar_storage_chart(data: &Data) -> String {
         .data_zoom(DataZoom::new().x_axis_index(0).y_axis_index(0))
         .series(Bar::new().data(values));
 
-    let options = serde_json::to_string(&chart).unwrap_or_else(|_| "{}".to_string());
+    let options = serde_json::to_string(&chart).unwrap_or_default();
     options
 }
 
 async fn index() -> impl IntoResponse {
     let data = Data::new();
+
     let scatter_options = get_scatter_throughput_chart(&data);
     let bar_throughput_options = get_bar_throughput_chart(&data);
     let bar_storage_options = get_bar_storage_chart(&data);
@@ -200,9 +210,20 @@ async fn index() -> impl IntoResponse {
             
 
             <script>
-                var chart1 = echarts.init(document.getElementById('chart1-container'));
-                var options1 = {scatter_options};
-                chart1.setOption(options1);
+            const initChart = (containerId, options) => {{
+                    const chart = echarts.init(document.getElementById(containerId), null, {{
+                        renderer: 'canvas',
+                        useDirtyRect: true
+                    }});
+                    options.series[0].large = true;
+                    options.series[0].largeThreshold = 1000;
+                    options.series[0].progressive = 1000;
+                    options.series[0].progressiveThreshold = 1000;
+                    chart.setOption(options);
+                    return chart;
+                }};
+                const chart1 = initChart('chart1-container', {scatter_options});
+                const chart5 = initChart('chart5-container', {scatter_efficient_frontier});
 
                 var chart2 = echarts.init(document.getElementById('chart2-container'));
                 var options2 = {bar_throughput_options};
@@ -216,9 +237,6 @@ async fn index() -> impl IntoResponse {
                 var options4 = {ebs_options};
                 chart4.setOption(options4);
 
-                var chart5 = echarts.init(document.getElementById('chart5-container'));
-                var options5 = {scatter_efficient_frontier};
-                chart5.setOption(options5);
 
                 // Resize charts when window size changes
                 window.addEventListener('resize', function() {{
