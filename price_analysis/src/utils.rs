@@ -23,38 +23,11 @@ struct EC2Instance {
     #[serde(rename = "Network Performance")]
     network_performance: String,
 
-    #[serde(rename = "On Demand")]
-    on_demand: String,
-
     #[serde(rename = "Linux Reserved cost")]
     linux_reserved_cost: String,
 
-    #[serde(rename = "Linux Spot Minimum cost")]
-    linux_spot_min_cost: String,
-
-    #[serde(rename = "Windows On Demand cost")]
-    windows_on_demand: String,
-
-    #[serde(rename = "Windows Reserved cost")]
-    windows_reserved_cost: String,
-
-    #[serde(rename = "Baseline bandwidth (Mbps)")]
-    baseline_bandwidth: Option<f64>,
-
-    #[serde(rename = "Maximum bandwidth (Mbps)")]
-    maximum_bandwidth: Option<f64>,
-
     #[serde(rename = "Baseline throughput (MB/s, 128 KiB I/O)")]
     baseline_throughput: Option<f64>,
-
-    #[serde(rename = "Maximum throughput (MB/s, 128 KiB I/O)")]
-    maximum_throughput: Option<f64>,
-
-    #[serde(rename = "Baseline IOPS (16 KiB I/O)")]
-    baseline_iops: Option<f64>,
-
-    #[serde(rename = "Maximum IOPS (16 KiB I/O)")]
-    maximum_iops: Option<f64>,
 }
 
 fn parse_vcpus(vcpus: &str) -> Option<(u32, Option<String>)> {
@@ -192,7 +165,7 @@ pub struct Data {
 
 impl Data {
     pub fn new() -> Data {
-        let instances = read_csv("./merged.csv").unwrap();
+        let instances = read_csv("./frankfurt.csv").unwrap();
         Data { instances }
     }
 
@@ -224,6 +197,10 @@ impl Data {
                 None => continue,
                 Some(v) => v,
             };
+
+            if (price / storage.0 as f64) > 100. {
+                continue;
+            }
             data_points.push((
                 format!("{} {}", instance.api_name.clone(), storage.1),
                 price / (storage.0 as f64),
@@ -251,7 +228,6 @@ impl Data {
     }
 
     pub fn get_efficient_frontier(&self) -> Vec<(String, f64, f64)> {
-
         let mut combinations = Vec::new();
         let storage = 100_000;
         for instance in &self.instances {
@@ -263,17 +239,52 @@ impl Data {
                 None => continue,
                 Some(v) => hourly_to_monthly(v),
             };
-            //TODO handle Instances with Storage
-            // let instance_storage = match parse_storage(&instance.storage) {
-            //     None => 0,
-            //     Some((v, _)) => v,
-            // };
 
-            for i in (125..16_000).step_by(100) {
-                let disk_count = (storage as f64 / i as f64).ceil() as u32;
+            let storage_per_instance = match parse_storage(&instance.storage) {
+                None => 0,
+                Some((v, _)) => v,
+            };
 
-                let min_instances = (disk_count as f64 / 40.).ceil() as u32;
-                let total_cost_per_month = 100_000. * 0.01596 + min_instances as f64 * price;
+            for i in (125..16_000).step_by(1000) {
+                let initial_disk_storage = 100_000;
+                let mut disk_count = (storage as f64 / i as f64).floor();
+                let mut min_instances = (disk_count / 40.).ceil() as u32;
+                let mut instance_storage = storage_per_instance * min_instances;
+                let mut remaining_disk_storage;
+                if instance_storage > initial_disk_storage {
+                    remaining_disk_storage = 0;
+                } else {
+                    remaining_disk_storage = initial_disk_storage - instance_storage;
+                }
+
+                for i in 1..10 {
+                    if storage_per_instance == 0 || remaining_disk_storage == 0 {
+                        continue;
+                    }
+
+                    disk_count = (remaining_disk_storage as f64 / i as f64).floor();
+                    let next_instance_count = (disk_count / 40.).ceil() as u32;
+                    if next_instance_count == min_instances {
+                        continue;
+                    }
+                    min_instances = next_instance_count;
+                    instance_storage = storage_per_instance * min_instances;
+                    if instance_storage > initial_disk_storage {
+                        remaining_disk_storage = 0;
+                        continue;
+                    } else {
+                        remaining_disk_storage = initial_disk_storage - instance_storage;
+                    }
+                }
+
+                let total_cost_per_month = remaining_disk_storage as f64 * 0.01596
+                    + min_instances as f64 * price
+                    + min_instances as f64 * 8. * 0.04575; //Root St1 Volume
+
+                if total_cost_per_month > 2250. {
+                    continue;
+                }
+
                 let max_throughput_per_disk = 250.;
                 let disk_throughput: f64 = max_throughput_per_disk * disk_count as f64;
                 let instance_throughput: f64 = baseline_throughput * min_instances as f64;
@@ -282,7 +293,10 @@ impl Data {
                     continue;
                 }
                 combinations.push((
-                    format!("{} sc1 disks, {} {}", disk_count, min_instances, &instance.name),
+                    format!(
+                        "{} sc1 disks, {} {}",
+                        disk_count, min_instances, &instance.name
+                    ),
                     total_cost_per_month,
                     throughput,
                 ));

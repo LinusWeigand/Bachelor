@@ -7,7 +7,12 @@ use aws_sdk_ec2::{
 };
 use aws_sdk_ssm::Client as SSMClient;
 use std::{
-    error::Error, fs::{self, create_dir_all, OpenOptions, Permissions}, io::Write, net::Ipv4Addr, thread, time::Duration
+    error::Error,
+    fs::{self, create_dir_all, OpenOptions, Permissions},
+    io::Write,
+    net::Ipv4Addr,
+    thread,
+    time::Duration,
 };
 use util::EC2Impl;
 
@@ -175,6 +180,8 @@ async fn setup_instance_via_ssm(
         "sudo yum install -y wget",
         wget_command.as_str(),
         "chmod +x ~/mvp",
+        "sudo mkdir -p /mnt/ebs",
+        "sudo mount /dev/xvdb /mnt/ebs",
         "~/mvp",
     ];
 
