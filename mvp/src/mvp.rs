@@ -3,7 +3,7 @@ use axum::extract::DefaultBodyLimit;
 mod handlers;
 mod route;
 
-const PARQUET_FOLDER: &str = "./parquet_files/";
+const PARQUET_FOLDER: &str = "/mnt/ebs/parquet_files/";
 
 #[tokio::main]
 async fn main() {
