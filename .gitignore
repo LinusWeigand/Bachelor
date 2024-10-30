@@ -1,8 +1,8 @@
-price_analysis/target/
-price_analysis/Cargo.lock
-price_analysis/**/doc/
-price_analysis/**/.rust-analyzer
-price_analysis/*.out
+data_analysis/target/
+data_analysis/Cargo.lock
+data_analysis/**/doc/
+data_analysis/**/.rust-analyzer
+data_analysis/*.out
 
 ec2/target/
 ec2/Cargo.lock

@@ -1,0 +1,442 @@
+use charming::component::{FilterMode, Title};
+use charming::datatype::{CompositeValue, DataPoint, Dataset, NumericValue, Source, Transform};
+use charming::df;
+use charming::element::{
+    AreaStyle, DimensionEncode, ItemStyle, LineStyle, NameLocation, Symbol, Trigger,
+};
+use charming::series::Line;
+use charming::{component::DataZoom, datatype::DataPointItem, element::Formatter};
+
+use charming::{element::AxisType, series::Bar};
+
+use axum::{
+    response::{Html, IntoResponse},
+    routing::get,
+    Router,
+};
+use charming::{component::Axis, element::Tooltip, series::Scatter, Chart};
+use serde_json::json;
+use tokio::main;
+use tower_http::compression::CompressionLayer;
+use utils::{InstanceData, MetricData};
+mod utils;
+
+#[main]
+async fn main() {
+    println!("Runinng: http://127.0.0.1:5555");
+
+    let compression_layer = CompressionLayer::new().br(true).gzip(true).deflate(true);
+    let app = Router::new()
+        .route("/", get(index))
+        .layer(compression_layer);
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:5555").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+fn calculate_moving_average(data: &[(f64, f64)], window_size: usize) -> Vec<(f64, f64)> {
+    let mut moving_average = Vec::new();
+    let mut sum = 0.0;
+
+    for (i, &(_, y)) in data.iter().enumerate() {
+        sum += y;
+        if i >= window_size {
+            sum -= data[i - window_size].1;
+            moving_average.push((data[i].0, sum / window_size as f64));
+        } else {
+            moving_average.push((data[i].0, sum / (i + 1) as f64));
+        }
+    }
+
+    moving_average
+}
+
+pub fn get_metric_chart(metric_data: Vec<(f64, f64)>) -> String {
+    let data_set: Vec<CompositeValue> = metric_data
+        .clone()
+        .into_iter()
+        .map(|(x, y)| {
+            CompositeValue::Array(vec![
+                CompositeValue::Number(NumericValue::from(x)),
+                CompositeValue::Number(NumericValue::from(y)),
+            ])
+        })
+        .collect();
+    let moving_average_data = calculate_moving_average(&metric_data, 60);
+    let moving_avg_set: Vec<CompositeValue> = moving_average_data
+        .iter()
+        .map(|&(x, y)| {
+            CompositeValue::Array(vec![
+                CompositeValue::Number(NumericValue::from(x)),
+                CompositeValue::Number(NumericValue::from(y)),
+            ])
+        })
+        .collect();
+    let chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .boundary_gap(false)
+                .min(0)
+                .max(60000),
+        )
+        .y_axis(Axis::new().type_(AxisType::Value).boundary_gap(false))
+        .tooltip(Tooltip::new().trigger(Trigger::Axis))
+        .series(
+            Line::new()
+                .name("Original")
+                .area_style(AreaStyle::new())
+                .data(data_set)
+                .symbol(Symbol::None),
+        )
+        .series(
+            Line::new()
+                .name("Moving Average")
+                .data(moving_avg_set)
+                .item_style(ItemStyle::new().color("#FF0000"))
+                .smooth(true)
+                .symbol(Symbol::None),
+        );
+
+    let options = serde_json::to_string(&chart).unwrap_or_default();
+    options
+}
+
+fn get_scatter_throughput_chart(instance_data: &InstanceData) -> String {
+    let data = instance_data.get_cost_throughput();
+    let chart = Chart::new()
+        .x_axis(Axis::new().name("Linux Reserved Price"))
+        .y_axis(Axis::new().name("Baseline Throughput (MBps)"))
+        .tooltip(Tooltip::new().formatter(Formatter::String("{b}: ({c0})".into())))
+        .data_zoom(DataZoom::new().x_axis_index(0).y_axis_index(0))
+        .series(
+            Scatter::new().symbol_size(10).data(
+                data.into_iter()
+                    .map(|(label, x, y)| DataPointItem::new(vec![x, y]).name(label))
+                    .collect::<Vec<_>>(),
+            ),
+        );
+    let options = serde_json::to_string(&chart).unwrap_or_default();
+    options
+}
+
+fn get_scatter_efficient_frontier(instance_data: &InstanceData) -> String {
+    let data = instance_data.get_efficient_frontier();
+    let chart = Chart::new()
+        .x_axis(Axis::new().name("Total Cost Per Month"))
+        .y_axis(Axis::new().name("Baseline Throughput (MBps)"))
+        .tooltip(Tooltip::new().formatter(Formatter::String("{b}: ({c0})".into())))
+        .data_zoom(
+            DataZoom::new()
+                .x_axis_index(0)
+                .y_axis_index(0)
+                .realtime(true),
+        )
+        .series(
+            Scatter::new().symbol_size(10).data(
+                data.into_iter()
+                    .map(|(label, x, y)| DataPointItem::new(vec![x, y]).name(label))
+                    .collect::<Vec<_>>(),
+            ),
+        );
+    let options = serde_json::to_string(&chart).unwrap_or_default();
+    options
+}
+
+fn get_bar_throughput_chart(instance_data: &InstanceData) -> String {
+    let data = instance_data.get_cost_per_throughput();
+    let (names, values): (Vec<String>, Vec<f64>) = data.into_iter().map(|(s, f)| (s, f)).unzip();
+    let chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Category)
+                .name("EC2 Instance Type")
+                .data(names),
+        )
+        .y_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name("Baseline Throughput Per Dollar (MBps)")
+                .scale(true),
+        )
+        .tooltip(Tooltip::new())
+        .data_zoom(
+            DataZoom::new()
+                .x_axis_index(0)
+                .y_axis_index(0)
+                .filter_mode(FilterMode::None)
+                .start(0)
+                .end(100),
+        )
+        .series(Bar::new().data(values));
+
+    let options = serde_json::to_string(&chart).unwrap_or_default();
+    options
+}
+fn get_bar_network_performance_per_gb_chart(instance_data: &InstanceData) -> String {
+    let data = instance_data.get_network_performance_per_gb();
+    let (names, values): (Vec<String>, Vec<f64>) = data.into_iter().map(|(s, f)| (s, f)).unzip();
+    let chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Category)
+                .name("EC2 Instance Type")
+                .data(names),
+        )
+        .y_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name("Network Performance per GB (GBps)")
+                .scale(true),
+        )
+        .tooltip(Tooltip::new())
+        .data_zoom(
+            DataZoom::new()
+                .x_axis_index(0)
+                .y_axis_index(0)
+                .filter_mode(FilterMode::None)
+                .start(0)
+                .end(100),
+        )
+        .series(Bar::new().data(values));
+
+    let options = serde_json::to_string(&chart).unwrap_or_default();
+    options
+}
+
+fn get_bar_ebs_chart() -> String {
+    let chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Category)
+                .name("Name")
+                .data(vec![
+                    "Io1",
+                    "Io2",
+                    "Gp2",
+                    "Gp3",
+                    "St1",
+                    "S3 bis 50TB",
+                    "S3 weitere 450TB",
+                    "S3 ab 500TB",
+                    "Sc1",
+                    "d3en",
+                ]),
+        )
+        .y_axis(Axis::new().type_(AxisType::Value).name("Cost per GB"))
+        .tooltip(Tooltip::new())
+        .data_zoom(DataZoom::new().x_axis_index(0).y_axis_index(0))
+        .series(Bar::new().data(df![
+            0.1311,
+            0.1311,
+            0.1045,
+            0.0836,
+            0.0475,
+            DataPointItem::new(0.023).item_style(ItemStyle::new().color("#a90000")),
+            DataPointItem::new(0.022).item_style(ItemStyle::new().color("#a90000")),
+            DataPointItem::new(0.021).item_style(ItemStyle::new().color("#a90000")),
+            0.01596,
+            0.0113834
+        ]));
+
+    let options = serde_json::to_string(&chart).unwrap_or_default();
+    options
+}
+
+fn get_bar_storage_chart(instance_data: &InstanceData) -> String {
+    let data = instance_data.get_cost_per_gb();
+    let (names, values): (Vec<String>, Vec<f64>) = data.into_iter().map(|(s, f)| (s, f)).unzip();
+    let chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Category)
+                .name("EC2 Instance Type")
+                .data(names),
+        )
+        .y_axis(Axis::new().type_(AxisType::Value).name("Storage (GB)"))
+        .tooltip(Tooltip::new())
+        .data_zoom(DataZoom::new().x_axis_index(0).y_axis_index(0))
+        .series(Bar::new().data(values));
+
+    let options = serde_json::to_string(&chart).unwrap_or_default();
+    options
+}
+
+async fn index() -> impl IntoResponse {
+    let data = InstanceData::new();
+
+    let scatter_options = get_scatter_throughput_chart(&data);
+    let bar_throughput_options = get_bar_throughput_chart(&data);
+    let bar_storage_options = get_bar_storage_chart(&data);
+    let ebs_options = get_bar_ebs_chart();
+    let scatter_efficient_frontier = get_scatter_efficient_frontier(&data);
+    let network_performance_per_gb_options = get_bar_network_performance_per_gb_chart(&data);
+
+    let tg4nano_data = MetricData::new("1tg4.nano&2Sc1125");
+    let t4gnano_throughput = get_metric_chart(tg4nano_data.bw);
+    let t4gnano_iops = get_metric_chart(tg4nano_data.iops);
+    let t4gnano_lat = get_metric_chart(tg4nano_data.lat);
+    let t4gnano_clat = get_metric_chart(tg4nano_data.clat);
+    let combined_html = format!(
+        r#"
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Combined Charts</title>
+            <!-- Include ECharts library -->
+            <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+            <style>
+                html, body {{
+                    margin: 0;
+                    padding: 0;
+                    height: 100%;
+                }}
+                .grid-container {{
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    grid-template-rows: 1fr 1fr;
+                    gap: 10px;
+                    width: 100%;
+                    height: 100%;
+                }}
+                .chart-item {{
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    width: 100%;
+                    height: 100%;
+                }}
+                .chart-container {{
+                    height: 100%;
+                    width: 100%;
+                }}
+                h1 {{
+                    text-align: center;
+                    font-family: Arial, sans-serif;
+                }}
+                h2 {{
+                    margin: 10px 0; 
+                    font-family: Arial, sans-serif;
+                    text-align: center;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>Throughput and Price</h1>
+            <div id="chart1-container" class="chart-container"></div>
+            <h1>Throughput per Dollar (1 MB/s)</h1>
+            <div id="chart2-container" class="chart-container"></div>
+            <h1>EC2 Cost per GB</h1>
+            <div id="chart3-container" class="chart-container"></div>
+            <h1>EBS Cost per GB</h1>
+            <div id="chart4-container" class="chart-container"></div>
+            <h1>Throughput & Cost Efficient Frontier</h1>
+            <div id="chart5-container" class="chart-container"></div>
+
+            <h1>Network Performance per GB</h1>
+            <div id="chart6-container" class="chart-container"></div>
+
+
+            <h1>RAID 0</h1>
+            <h2>1 tg4.nano & 2 Sc1 with 125Gib each</h2>
+                <div class="grid-container">
+                    <div class="chart-item">
+                        <h2>Throughput (kB/s)</h2>
+                        <div id="chart7-container" class="chart-container"></div>
+                    </div>
+
+                    <div class="chart-item">
+                        <h2>IOPS</h2>
+                        <div id="chart8-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Total Latency (millis)</h2>
+                        <div id="chart9-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Completion Latency (millis)</h2>
+                        <div id="chart10-container" class="chart-container"></div>
+                    </div>
+                </div>
+
+            <h2> d3en.xlarge </h2>
+                <div class="grid-container">
+                    <div class="chart-item">
+                        <h2>Throughput (kB/s)</h2>
+                        <div id="chart11-container" class="chart-container"></div>
+                    </div>
+
+                    <div class="chart-item">
+                        <h2>IOPS</h2>
+                        <div id="chart12-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Total Latency (millis)</h2>
+                        <div id="chart13-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Completion Latency (millis)</h2>
+                        <div id="chart14-container" class="chart-container"></div>
+                    </div>
+                </div>
+            
+
+            <script>
+            const initChart = (containerId, options) => {{
+                    const chart = echarts.init(document.getElementById(containerId), null, {{
+                        renderer: 'canvas',
+                        useDirtyRect: true
+                    }});
+                    options.series[0].large = true;
+                    options.series[0].largeThreshold = 1000;
+                    options.series[0].progressive = 1000;
+                    options.series[0].progressiveThreshold = 1000;
+                    chart.setOption(options);
+                    return chart;
+                }};
+                const chart1 = initChart('chart1-container', {scatter_options});
+                const chart2 = initChart('chart2-container', {bar_throughput_options});
+                const chart3 = initChart('chart3-container', {bar_storage_options});
+                const chart4 = initChart('chart4-container', {ebs_options});
+                const chart5 = initChart('chart5-container', {scatter_efficient_frontier});
+                const chart6 = initChart('chart6-container', {network_performance_per_gb_options});
+
+                const chart7 = initChart('chart7-container', {t4gnano_throughput});
+                const chart8 = initChart('chart8-container', {t4gnano_iops});
+                const chart9 = initChart('chart9-container', {t4gnano_lat});
+                const chart10 = initChart('chart10-container', {t4gnano_clat});
+
+                const chart11 = initChart('chart11-container', {d3enxlarge_throughput});
+                const chart12 = initChart('chart12-container', {d3enxlarge_iops});
+                const chart13 = initChart('chart13-container', {d3enxlarge_lat});
+                const chart14 = initChart('chart14-container', {d3enxlarge_clat});
+
+
+                // Resize charts when window size changes
+                window.addEventListener('resize', function() {{
+                    chart1.resize();
+                    chart2.resize();
+                    chart3.resize();
+                    chart4.resize();
+                    chart5.resize();
+                    chart6.resize();
+                    
+                    chart7.resize();
+                    chart8.resize();
+                    chart9.resize();
+                    chart10.resize();
+
+                    chart11.resize();
+                    chart12.resize();
+                    chart13.resize();
+                    chart14.resize();
+
+                }});
+            </script>
+        </body>
+        </html>
+        "#
+    );
+
+    Html(combined_html).into_response()
+}
