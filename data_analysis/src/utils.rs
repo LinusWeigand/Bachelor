@@ -144,9 +144,9 @@ fn parse_price(on_demand: &str) -> Option<f64> {
     };
 }
 
-fn hourly_to_monthly(hourly: f64) -> f64 {
-    hourly * 24. * 30.432098765432099
-}
+// fn hourly_to_monthly(hourly: f64) -> f64 {
+//     hourly * 24. * 30.432098765432099
+// }
 
 fn read_csv(file_path: &str) -> Result<Vec<EC2Instance>, Box<dyn Error>> {
     let mut reader = ReaderBuilder::new()
@@ -178,7 +178,7 @@ impl InstanceData {
         for instance in &self.instances {
             let price = match parse_price(&instance.linux_reserved_cost) {
                 None => continue,
-                Some(v) => hourly_to_monthly(v),
+                Some(v) => v,
             };
             let baseline_throughput = match instance.baseline_throughput {
                 None => continue,
@@ -194,7 +194,7 @@ impl InstanceData {
         for instance in &self.instances {
             let price = match parse_price(&instance.linux_reserved_cost) {
                 None => continue,
-                Some(v) => hourly_to_monthly(v),
+                Some(v) => v,
             };
 
             let storage = match parse_storage(&instance.storage) {
@@ -214,12 +214,38 @@ impl InstanceData {
         data_points
     }
 
+    pub fn get_network_performance_per_gb(&self) -> Vec<(String, f64)> {
+        let mut data_points: Vec<(String, f64)> = Vec::new();
+        for instance in &self.instances {
+            let network_performance = match parse_network_performance(&instance.network_performance)
+            {
+                None => continue,
+                Some(v) => v,
+            };
+
+            let storage = match parse_storage(&instance.storage) {
+                None => continue,
+                Some(v) => v,
+            };
+
+            // if (price / storage.0 as f64) > 100. {
+            //     continue;
+            // }
+            data_points.push((
+                format!("{} {}", instance.api_name.clone(), storage.1),
+                network_performance / (storage.0 as f64),
+            ));
+        }
+        data_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        data_points
+    }
+
     pub fn get_cost_per_throughput(&self) -> Vec<(String, f64)> {
         let mut data_points: Vec<(String, f64)> = Vec::new();
         for instance in &self.instances {
             let price = match parse_price(&instance.linux_reserved_cost) {
                 None => continue,
-                Some(v) => hourly_to_monthly(v),
+                Some(v) => v,
             };
             let baseline_throughput = match instance.baseline_throughput {
                 None => continue,
@@ -241,7 +267,7 @@ impl InstanceData {
             };
             let price = match parse_price(&instance.linux_reserved_cost) {
                 None => continue,
-                Some(v) => hourly_to_monthly(v),
+                Some(v) => v,
             };
 
             let storage_per_instance = match parse_storage(&instance.storage) {
@@ -331,7 +357,7 @@ fn read_log_file(file_path: &str, is_latency: bool) -> Result<Vec<(f64, f64)>, B
     Ok(data)
 }
 
-struct MetricData {
+pub struct MetricData {
     pub bw: Vec<(f64, f64)>,
     pub iops: Vec<(f64, f64)>,
     pub lat: Vec<(f64, f64)>,
@@ -340,8 +366,17 @@ struct MetricData {
 
 impl MetricData {
     pub fn new(file_path: &str) -> MetricData {
+        println!(
+            "File Path: {}",
+            &format!("./data/latency/{}/bw.log", file_path)
+        );
+
+        println!(
+            "Current working directory: {:?}",
+            std::env::current_dir().unwrap()
+        );
         let bw = read_log_file(&format!("./data/latency/{}/bw.log", file_path), false).unwrap();
-        let iops = read_log_file(&format!("./data/latency/{}iops.log", file_path), false).unwrap();
+        let iops = read_log_file(&format!("./data/latency/{}/iops.log", file_path), false).unwrap();
         let lat = read_log_file(&format!("./data/latency/{}/lat.log", file_path), false).unwrap();
         let clat = read_log_file(&format!("./data/latency/{}/clat.log", file_path), false).unwrap();
 

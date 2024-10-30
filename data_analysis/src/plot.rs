@@ -272,11 +272,49 @@ async fn index() -> impl IntoResponse {
     let scatter_efficient_frontier = get_scatter_efficient_frontier(&data);
     let network_performance_per_gb_options = get_bar_network_performance_per_gb_chart(&data);
 
-    let tg4nano_data = MetricData::new("1tg4.nano&2Sc1125");
-    let t4gnano_throughput = get_metric_chart(tg4nano_data.bw);
-    let t4gnano_iops = get_metric_chart(tg4nano_data.iops);
-    let t4gnano_lat = get_metric_chart(tg4nano_data.lat);
-    let t4gnano_clat = get_metric_chart(tg4nano_data.clat);
+    let raid0_seq_read_tg4nano_data = MetricData::new("tg4.nano/RAID0/seq_read");
+    let raid0_seq_read_t4gnano_throughput = get_metric_chart(raid0_seq_read_tg4nano_data.bw);
+    let raid0_seq_read_t4gnano_iops = get_metric_chart(raid0_seq_read_tg4nano_data.iops);
+    let raid0_seq_read_t4gnano_lat = get_metric_chart(raid0_seq_read_tg4nano_data.lat);
+    let raid0_seq_read_t4gnano_clat = get_metric_chart(raid0_seq_read_tg4nano_data.clat);
+
+
+    let raid1_seq_read_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/seq_read");
+    let raid1_seq_read_d3enxlarge_throughput = get_metric_chart(raid1_seq_read_d3enxlarge_data.bw);
+    let raid1_seq_read_d3enxlarge_iops = get_metric_chart(raid1_seq_read_d3enxlarge_data.iops);
+    let raid1_seq_read_d3enxlarge_lat = get_metric_chart(raid1_seq_read_d3enxlarge_data.lat);
+    let raid1_seq_read_d3enxlarge_clat = get_metric_chart(raid1_seq_read_d3enxlarge_data.clat);
+
+    let raid1_seq_write_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/seq_write");
+    let raid1_seq_write_d3enxlarge_throughput = get_metric_chart(raid1_seq_write_d3enxlarge_data.bw);
+    let raid1_seq_write_d3enxlarge_iops = get_metric_chart(raid1_seq_write_d3enxlarge_data.iops);
+    let raid1_seq_write_d3enxlarge_lat = get_metric_chart(raid1_seq_write_d3enxlarge_data.lat);
+    let raid1_seq_write_d3enxlarge_clat = get_metric_chart(raid1_seq_write_d3enxlarge_data.clat);
+
+    let raid1_rand_read_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/rand_read");
+    let raid1_rand_read_d3enxlarge_throughput = get_metric_chart(raid1_rand_read_d3enxlarge_data.bw);
+    let raid1_rand_read_d3enxlarge_iops = get_metric_chart(raid1_rand_read_d3enxlarge_data.iops);
+    let raid1_rand_read_d3enxlarge_lat = get_metric_chart(raid1_rand_read_d3enxlarge_data.lat);
+    let raid1_rand_read_d3enxlarge_clat = get_metric_chart(raid1_rand_read_d3enxlarge_data.clat);
+
+    let raid1_rand_write_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/rand_write");
+    let raid1_rand_write_d3enxlarge_throughput = get_metric_chart(raid1_rand_write_d3enxlarge_data.bw);
+    let raid1_rand_write_d3enxlarge_iops = get_metric_chart(raid1_rand_write_d3enxlarge_data.iops);
+    let raid1_rand_write_d3enxlarge_lat = get_metric_chart(raid1_rand_write_d3enxlarge_data.lat);
+    let raid1_rand_write_d3enxlarge_clat = get_metric_chart(raid1_rand_write_d3enxlarge_data.clat);
+
+    let raid1_rand_mixed_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/rand_mixed");
+    let raid1_rand_mixed_d3enxlarge_throughput = get_metric_chart(raid1_rand_mixed_d3enxlarge_data.bw);
+    let raid1_rand_mixed_d3enxlarge_iops = get_metric_chart(raid1_rand_mixed_d3enxlarge_data.iops);
+    let raid1_rand_mixed_d3enxlarge_lat = get_metric_chart(raid1_rand_mixed_d3enxlarge_data.lat);
+    let raid1_rand_mixed_d3enxlarge_clat = get_metric_chart(raid1_rand_mixed_d3enxlarge_data.clat);
+
+    let raid1_seq_mixed_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/seq_mixed");
+    let raid1_seq_mixed_d3enxlarge_throughput = get_metric_chart(raid1_seq_mixed_d3enxlarge_data.bw);
+    let raid1_seq_mixed_d3enxlarge_iops = get_metric_chart(raid1_seq_mixed_d3enxlarge_data.iops);
+    let raid1_seq_mixed_d3enxlarge_lat = get_metric_chart(raid1_seq_mixed_d3enxlarge_data.lat);
+    let raid1_seq_mixed_d3enxlarge_clat = get_metric_chart(raid1_seq_mixed_d3enxlarge_data.clat);
+
     let combined_html = format!(
         r#"
         <html>
@@ -359,7 +397,8 @@ async fn index() -> impl IntoResponse {
                     </div>
                 </div>
 
-            <h2> d3en.xlarge </h2>
+            <h1>RAID 1</h1>
+            <h2> d3en.xlarge Seq Read</h2>
                 <div class="grid-container">
                     <div class="chart-item">
                         <h2>Throughput (kB/s)</h2>
@@ -379,7 +418,111 @@ async fn index() -> impl IntoResponse {
                         <div id="chart14-container" class="chart-container"></div>
                     </div>
                 </div>
+
+            <h2> d3en.xlarge Rand Read</h2>
+                <div class="grid-container">
+                    <div class="chart-item">
+                        <h2>Throughput (kB/s)</h2>
+                        <div id="chart15-container" class="chart-container"></div>
+                    </div>
+
+                    <div class="chart-item">
+                        <h2>IOPS</h2>
+                        <div id="chart16-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Total Latency (millis)</h2>
+                        <div id="chart17-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Completion Latency (millis)</h2>
+                        <div id="chart18-container" class="chart-container"></div>
+                    </div>
+                </div>
+
+            <h2> d3en.xlarge Seq Write</h2>
+                <div class="grid-container">
+                    <div class="chart-item">
+                        <h2>Throughput (kB/s)</h2>
+                        <div id="chart19-container" class="chart-container"></div>
+                    </div>
+
+                    <div class="chart-item">
+                        <h2>IOPS</h2>
+                        <div id="chart20-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Total Latency (millis)</h2>
+                        <div id="chart21-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Completion Latency (millis)</h2>
+                        <div id="chart22-container" class="chart-container"></div>
+                    </div>
+                </div>
             
+            <h2> d3en.xlarge Rand Write</h2>
+                <div class="grid-container">
+                    <div class="chart-item">
+                        <h2>Throughput (kB/s)</h2>
+                        <div id="chart23-container" class="chart-container"></div>
+                    </div>
+
+                    <div class="chart-item">
+                        <h2>IOPS</h2>
+                        <div id="chart24-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Total Latency (millis)</h2>
+                        <div id="chart25-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Completion Latency (millis)</h2>
+                        <div id="chart26-container" class="chart-container"></div>
+                    </div>
+                </div>
+            <h2> d3en.xlarge Rand Read/Write (80/20)</h2>
+                <div class="grid-container">
+                    <div class="chart-item">
+                        <h2>Throughput (kB/s)</h2>
+                        <div id="chart27-container" class="chart-container"></div>
+                    </div>
+
+                    <div class="chart-item">
+                        <h2>IOPS</h2>
+                        <div id="chart28-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Total Latency (millis)</h2>
+                        <div id="chart29-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Completion Latency (millis)</h2>
+                        <div id="chart30-container" class="chart-container"></div>
+                    </div>
+                </div>
+
+            <h2> d3en.xlarge Seq Read/Write (80/20)</h2>
+                <div class="grid-container">
+                    <div class="chart-item">
+                        <h2>Throughput (kB/s)</h2>
+                        <div id="chart31-container" class="chart-container"></div>
+                    </div>
+
+                    <div class="chart-item">
+                        <h2>IOPS</h2>
+                        <div id="chart32-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Total Latency (millis)</h2>
+                        <div id="chart33-container" class="chart-container"></div>
+                    </div>
+                    <div class="chart-item">
+                        <h2>Completion Latency (millis)</h2>
+                        <div id="chart34-container" class="chart-container"></div>
+                    </div>
+                </div>
+
 
             <script>
             const initChart = (containerId, options) => {{
@@ -401,16 +544,40 @@ async fn index() -> impl IntoResponse {
                 const chart5 = initChart('chart5-container', {scatter_efficient_frontier});
                 const chart6 = initChart('chart6-container', {network_performance_per_gb_options});
 
-                const chart7 = initChart('chart7-container', {t4gnano_throughput});
-                const chart8 = initChart('chart8-container', {t4gnano_iops});
-                const chart9 = initChart('chart9-container', {t4gnano_lat});
-                const chart10 = initChart('chart10-container', {t4gnano_clat});
+                const chart7 = initChart('chart7-container', {raid0_seq_read_t4gnano_throughput});
+                const chart8 = initChart('chart8-container', {raid0_seq_read_t4gnano_iops});
+                const chart9 = initChart('chart9-container', {raid0_seq_read_t4gnano_lat});
+                const chart10 = initChart('chart10-container', {raid0_seq_read_t4gnano_clat});
 
-                const chart11 = initChart('chart11-container', {d3enxlarge_throughput});
-                const chart12 = initChart('chart12-container', {d3enxlarge_iops});
-                const chart13 = initChart('chart13-container', {d3enxlarge_lat});
-                const chart14 = initChart('chart14-container', {d3enxlarge_clat});
+                const chart11 = initChart('chart11-container', {raid1_seq_read_d3enxlarge_throughput});
+                const chart12 = initChart('chart12-container', {raid1_seq_read_d3enxlarge_iops});
+                const chart13 = initChart('chart13-container', {raid1_seq_read_d3enxlarge_lat});
+                const chart14 = initChart('chart14-container', {raid1_seq_read_d3enxlarge_clat});
 
+                const chart15 = initChart('chart15-container', {raid1_rand_read_d3enxlarge_throughput});
+                const chart16 = initChart('chart16-container', {raid1_rand_read_d3enxlarge_iops});
+                const chart17 = initChart('chart17-container', {raid1_rand_read_d3enxlarge_lat});
+                const chart18 = initChart('chart18-container', {raid1_rand_read_d3enxlarge_clat});
+
+                const chart19 = initChart('chart19-container', {raid1_seq_write_d3enxlarge_throughput});
+                const chart20 = initChart('chart20-container', {raid1_seq_write_d3enxlarge_iops});
+                const chart21 = initChart('chart21-container', {raid1_seq_write_d3enxlarge_lat});
+                const chart22 = initChart('chart22-container', {raid1_seq_write_d3enxlarge_clat});
+
+                const chart23 = initChart('chart23-container', {raid1_rand_write_d3enxlarge_throughput});
+                const chart24 = initChart('chart24-container', {raid1_rand_write_d3enxlarge_iops});
+                const chart25 = initChart('chart25-container', {raid1_rand_write_d3enxlarge_lat});
+                const chart26 = initChart('chart26-container', {raid1_rand_write_d3enxlarge_clat});
+
+                const chart27 = initChart('chart23-container', {raid1_rand_mixed_d3enxlarge_throughput});
+                const chart28 = initChart('chart24-container', {raid1_rand_mixed_d3enxlarge_iops});
+                const chart29 = initChart('chart25-container', {raid1_rand_mixed_d3enxlarge_lat});
+                const chart30 = initChart('chart26-container', {raid1_rand_mixed_d3enxlarge_clat});
+
+                const chart27 = initChart('chart23-container', {raid1_seq_mixed_d3enxlarge_throughput});
+                const chart28 = initChart('chart24-container', {raid1_seq_mixed_d3enxlarge_iops});
+                const chart29 = initChart('chart25-container', {raid1_seq_mixed_d3enxlarge_lat});
+                const chart30 = initChart('chart26-container', {raid1_seq_mixed_d3enxlarge_clat});
 
                 // Resize charts when window size changes
                 window.addEventListener('resize', function() {{
@@ -430,6 +597,26 @@ async fn index() -> impl IntoResponse {
                     chart12.resize();
                     chart13.resize();
                     chart14.resize();
+
+                    chart15.resize();
+                    chart16.resize();
+                    chart17.resize();
+                    chart18.resize();
+
+                    chart19.resize();
+                    chart20.resize();
+                    chart21.resize();
+                    chart22.resize();
+
+                    chart23.resize();
+                    chart24.resize();
+                    chart25.resize();
+                    chart26.resize();
+
+                    chart27.resize();
+                    chart28.resize();
+                    chart29.resize();
+                    chart30.resize();
 
                 }});
             </script>
