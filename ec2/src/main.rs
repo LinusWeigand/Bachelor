@@ -7,7 +7,12 @@ use aws_sdk_ec2::{
 };
 use aws_sdk_ssm::Client as SSMClient;
 use std::{
-    error::Error, fs::{self, create_dir_all, OpenOptions, Permissions}, io::Write, net::Ipv4Addr, thread, time::Duration
+    error::Error,
+    fs::{self, create_dir_all, OpenOptions, Permissions},
+    io::Write,
+    net::Ipv4Addr,
+    thread,
+    time::Duration,
 };
 use util::EC2Impl;
 
@@ -38,17 +43,13 @@ async fn setup_connection(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
     let ec2_ip = ec2.get_instance_public_ip(&instance_id).await?.unwrap();
 
     //Configure connect.sh
-    let file_path = "./connect.sh";
+    let file_path = "./ip.sh";
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
         .append(false)
         .open(file_path)?;
-    writeln!(
-        file,
-        "{}",
-        format!("ssh -i ~/.ssh/{}.pem ec2-user@{}", KEY_PAIR_NAME, ec2_ip)
-    )?;
+    writeln!(file, "{}", format!("export IP={}", ec2_ip))?;
     Ok(())
 }
 
@@ -81,7 +82,7 @@ async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
 
     //Create Instance
     let ami_id = get_latest_ami_id().await?;
-    let instance_type = InstanceType::T4gNano;
+    let instance_type = InstanceType::D3enXlarge;
     let instance_id = ec2
         .create_instance(
             ami_id.as_str(),
@@ -152,7 +153,10 @@ async fn get_latest_ami_id() -> Result<String, Box<dyn Error>> {
     let config = aws_config::load_from_env().await;
     let ssm_client = SSMClient::new(&config);
 
-    let ami_param_name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64";
+    // let ami_param_name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"; // TG4Nano
+    // let ami_param_name = "/aws/service/ami-amazon-linux-latest/ami-08ec94f928cf25a9d"; //D2EN
+                                                                                       //
+    let ami_param_name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64";
     let ami_param = ssm_client
         .get_parameter()
         .name(ami_param_name)

@@ -1,1 +1,3 @@
-ssh -i ~/.ssh/mvp-key-pair.pem ec2-user@18.159.254.56
+source ./ip.sh
+
+ssh -i ~/.ssh/mvp-key-pair.pem ec2-user@$IP
