@@ -202,9 +202,9 @@ impl InstanceData {
                 Some(v) => v,
             };
 
-            if (price / storage.0 as f64) > 100. {
-                continue;
-            }
+            // if (price / storage.0 as f64) > 100. {
+            //     continue;
+            // }
             data_points.push((
                 format!("{} {}", instance.api_name.clone(), storage.1),
                 price / (storage.0 as f64),
@@ -217,6 +217,9 @@ impl InstanceData {
     pub fn get_network_performance_per_gb(&self) -> Vec<(String, f64)> {
         let mut data_points: Vec<(String, f64)> = Vec::new();
         for instance in &self.instances {
+            if !instance.api_name.trim().starts_with("d3en") {
+                continue;
+            }
             let network_performance = match parse_network_performance(&instance.network_performance)
             {
                 None => continue,
@@ -311,9 +314,9 @@ impl InstanceData {
                     + min_instances as f64 * price
                     + min_instances as f64 * 8. * 0.04575; //Root St1 Volume
 
-                if total_cost_per_month > 2250. {
-                    continue;
-                }
+                // if total_cost_per_month > 2250. {
+                //     continue;
+                // }
 
                 let max_throughput_per_disk = 250.;
                 let disk_throughput: f64 = max_throughput_per_disk * disk_count as f64;
@@ -348,7 +351,7 @@ fn read_log_file(file_path: &str, is_latency: bool) -> Result<Vec<(f64, f64)>, B
         if let (Some(x_str), Some(y_str)) = (parts.get(0), parts.get(1)) {
             if let (Ok(x), Ok(mut y)) = (x_str.trim().parse::<f64>(), y_str.trim().parse::<f64>()) {
                 if is_latency {
-                    y /= 1000.;
+                    y /= 1_000_000.;
                 }
                 data.push((x, y));
             }
@@ -377,8 +380,8 @@ impl MetricData {
         );
         let bw = read_log_file(&format!("./data/latency/{}/bw.log", file_path), false).unwrap();
         let iops = read_log_file(&format!("./data/latency/{}/iops.log", file_path), false).unwrap();
-        let lat = read_log_file(&format!("./data/latency/{}/lat.log", file_path), false).unwrap();
-        let clat = read_log_file(&format!("./data/latency/{}/clat.log", file_path), false).unwrap();
+        let lat = read_log_file(&format!("./data/latency/{}/lat.log", file_path), true).unwrap();
+        let clat = read_log_file(&format!("./data/latency/{}/clat.log", file_path), true).unwrap();
 
         MetricData {
             bw,
