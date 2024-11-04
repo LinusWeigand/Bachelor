@@ -278,6 +278,18 @@ async fn index() -> impl IntoResponse {
     let raid0_seq_read_t4gnano_lat = get_metric_chart(raid0_seq_read_tg4nano_data.lat);
     let raid0_seq_read_t4gnano_clat = get_metric_chart(raid0_seq_read_tg4nano_data.clat);
 
+    let seq_read_raid0_d3en_large_data = MetricData::new("d3en.xlarge/RAID0/seq_read");
+    let seq_read_raid0_d3en_large_throughput = get_metric_chart(seq_read_raid0_d3en_large_data.bw);
+    let seq_read_raid0_d3en_large_iops = get_metric_chart(seq_read_raid0_d3en_large_data.iops);
+    let seq_read_raid0_d3en_large_lat = get_metric_chart(seq_read_raid0_d3en_large_data.lat);
+    let seq_read_raid0_d3en_large_clat = get_metric_chart(seq_read_raid0_d3en_large_data.clat);
+
+    let seq_write_raid0_d3en_large_data = MetricData::new("d3en.xlarge/RAID0/seq_write");
+    let seq_write_raid0_d3en_large_throughput =
+        get_metric_chart(seq_write_raid0_d3en_large_data.bw);
+    let seq_write_raid0_d3en_large_iops = get_metric_chart(seq_write_raid0_d3en_large_data.iops);
+    let seq_write_raid0_d3en_large_lat = get_metric_chart(seq_write_raid0_d3en_large_data.lat);
+    let seq_write_raid0_d3en_large_clat = get_metric_chart(seq_write_raid0_d3en_large_data.clat);
 
     // Seq Read 1
     let raid1_seq_read_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/seq_read");
@@ -288,55 +300,59 @@ async fn index() -> impl IntoResponse {
 
     // Seq Write 2
     let raid1_seq_write_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/seq_write");
-    let raid1_seq_write_d3enxlarge_throughput = get_metric_chart(raid1_seq_write_d3enxlarge_data.bw);
+    let raid1_seq_write_d3enxlarge_throughput =
+        get_metric_chart(raid1_seq_write_d3enxlarge_data.bw);
     let raid1_seq_write_d3enxlarge_iops = get_metric_chart(raid1_seq_write_d3enxlarge_data.iops);
     let raid1_seq_write_d3enxlarge_lat = get_metric_chart(raid1_seq_write_d3enxlarge_data.lat);
     let raid1_seq_write_d3enxlarge_clat = get_metric_chart(raid1_seq_write_d3enxlarge_data.clat);
 
     // Rand Read 3
     let raid1_rand_read_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/rand_read");
-    let raid1_rand_read_d3enxlarge_throughput = get_metric_chart(raid1_rand_read_d3enxlarge_data.bw);
+    let raid1_rand_read_d3enxlarge_throughput =
+        get_metric_chart(raid1_rand_read_d3enxlarge_data.bw);
     let raid1_rand_read_d3enxlarge_iops = get_metric_chart(raid1_rand_read_d3enxlarge_data.iops);
     let raid1_rand_read_d3enxlarge_lat = get_metric_chart(raid1_rand_read_d3enxlarge_data.lat);
     let raid1_rand_read_d3enxlarge_clat = get_metric_chart(raid1_rand_read_d3enxlarge_data.clat);
 
     // Rand Write 4
     let raid1_rand_write_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/rand_write");
-    let raid1_rand_write_d3enxlarge_throughput = get_metric_chart(raid1_rand_write_d3enxlarge_data.bw);
+    let raid1_rand_write_d3enxlarge_throughput =
+        get_metric_chart(raid1_rand_write_d3enxlarge_data.bw);
     let raid1_rand_write_d3enxlarge_iops = get_metric_chart(raid1_rand_write_d3enxlarge_data.iops);
     let raid1_rand_write_d3enxlarge_lat = get_metric_chart(raid1_rand_write_d3enxlarge_data.lat);
     let raid1_rand_write_d3enxlarge_clat = get_metric_chart(raid1_rand_write_d3enxlarge_data.clat);
 
     // Rand Mixed 5
     let raid1_rand_mixed_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/rand_mix");
-    let raid1_rand_mixed_d3enxlarge_throughput = get_metric_chart(raid1_rand_mixed_d3enxlarge_data.bw);
+    let raid1_rand_mixed_d3enxlarge_throughput =
+        get_metric_chart(raid1_rand_mixed_d3enxlarge_data.bw);
     let raid1_rand_mixed_d3enxlarge_iops = get_metric_chart(raid1_rand_mixed_d3enxlarge_data.iops);
     let raid1_rand_mixed_d3enxlarge_lat = get_metric_chart(raid1_rand_mixed_d3enxlarge_data.lat);
     let raid1_rand_mixed_d3enxlarge_clat = get_metric_chart(raid1_rand_mixed_d3enxlarge_data.clat);
 
     // Seq Mixed 6
     let raid1_seq_mixed_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID1/seq_mix");
-    let raid1_seq_mixed_d3enxlarge_throughput = get_metric_chart(raid1_seq_mixed_d3enxlarge_data.bw);
+    let raid1_seq_mixed_d3enxlarge_throughput =
+        get_metric_chart(raid1_seq_mixed_d3enxlarge_data.bw);
     let raid1_seq_mixed_d3enxlarge_iops = get_metric_chart(raid1_seq_mixed_d3enxlarge_data.iops);
     let raid1_seq_mixed_d3enxlarge_lat = get_metric_chart(raid1_seq_mixed_d3enxlarge_data.lat);
     let raid1_seq_mixed_d3enxlarge_clat = get_metric_chart(raid1_seq_mixed_d3enxlarge_data.clat);
 
-
     // Rand Mixed
     let raid5_rand_mixed_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID5/rand_mix");
-    let raid5_rand_mixed_d3enxlarge_throughput = get_metric_chart(raid5_rand_mixed_d3enxlarge_data.bw);
+    let raid5_rand_mixed_d3enxlarge_throughput =
+        get_metric_chart(raid5_rand_mixed_d3enxlarge_data.bw);
     let raid5_rand_mixed_d3enxlarge_iops = get_metric_chart(raid5_rand_mixed_d3enxlarge_data.iops);
     let raid5_rand_mixed_d3enxlarge_lat = get_metric_chart(raid5_rand_mixed_d3enxlarge_data.lat);
     let raid5_rand_mixed_d3enxlarge_clat = get_metric_chart(raid5_rand_mixed_d3enxlarge_data.clat);
 
     // Seq Mixed
     let raid5_seq_mixed_d3enxlarge_data = MetricData::new("d3en.xlarge/RAID5/seq_mix");
-    let raid5_seq_mixed_d3enxlarge_throughput = get_metric_chart(raid5_seq_mixed_d3enxlarge_data.bw);
+    let raid5_seq_mixed_d3enxlarge_throughput =
+        get_metric_chart(raid5_seq_mixed_d3enxlarge_data.bw);
     let raid5_seq_mixed_d3enxlarge_iops = get_metric_chart(raid5_seq_mixed_d3enxlarge_data.iops);
     let raid5_seq_mixed_d3enxlarge_lat = get_metric_chart(raid5_seq_mixed_d3enxlarge_data.lat);
     let raid5_seq_mixed_d3enxlarge_clat = get_metric_chart(raid5_seq_mixed_d3enxlarge_data.clat);
-
-
 
     let combined_html = format!(
         r#"
@@ -399,10 +415,10 @@ async fn index() -> impl IntoResponse {
 
 
             <h1>RAID 0</h1>
-            <h2>1 tg4.nano & 2 Sc1 with 125Gib each</h2>
+            <h2>d3en xlarge Sequential Reads, 4MB Block size</h2>
                 <div class="grid-container">
                     <div class="chart-item">
-                        <h2>Throughput (kB/s)</h2>
+                        <h2>Throughput (MB/s)</h2>
                         <div id="chart7-container" class="chart-container"></div>
                     </div>
 
@@ -617,10 +633,10 @@ async fn index() -> impl IntoResponse {
                 const chart5 = initChart('chart5-container', {scatter_efficient_frontier});
                 const chart6 = initChart('chart6-container', {network_performance_per_gb_options});
 
-                const chart7 = initChart('chart7-container', {raid0_seq_read_t4gnano_throughput});
-                const chart8 = initChart('chart8-container', {raid0_seq_read_t4gnano_iops});
-                const chart9 = initChart('chart9-container', {raid0_seq_read_t4gnano_lat});
-                const chart10 = initChart('chart10-container', {raid0_seq_read_t4gnano_clat});
+                const chart7 = initChart('chart7-container', {seq_read_raid0_d3en_large_throughput});
+                const chart8 = initChart('chart8-container', {seq_read_raid0_d3en_large_iops});
+                const chart9 = initChart('chart9-container', {seq_read_raid0_d3en_large_lat});
+                const chart10 = initChart('chart10-container', {seq_read_raid0_d3en_large_clat});
 
 
                 const chart11 = initChart('chart11-container', {raid1_seq_read_d3enxlarge_throughput});
