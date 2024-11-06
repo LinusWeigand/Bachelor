@@ -96,7 +96,7 @@ async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
     println!("Launched EC2 instance with ID: {}", instance_id);
     // ec2.wait_for_instance_ready(&instance_id, Some(Duration::from_secs(120)))
     //     .await?;
-    thread::sleep(Duration::from_secs(20));
+    thread::sleep(Duration::from_secs(10));
     println!("EC2 Instance is ready!");
 
     Ok(())
@@ -153,10 +153,8 @@ async fn get_latest_ami_id() -> Result<String, Box<dyn Error>> {
     let config = aws_config::load_from_env().await;
     let ssm_client = SSMClient::new(&config);
 
-    // let ami_param_name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"; // TG4Nano
-    // let ami_param_name = "/aws/service/ami-amazon-linux-latest/ami-08ec94f928cf25a9d"; //D2EN
-                                                                                       //
-    let ami_param_name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64";
+    // let ami_param_name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"; // ARM
+    let ami_param_name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"; //x_85
     let ami_param = ssm_client
         .get_parameter()
         .name(ami_param_name)
