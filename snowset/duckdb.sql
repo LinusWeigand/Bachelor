@@ -34,16 +34,28 @@ FROM (
         warehouseId
 ) AS warehouse_sizes;
 
--- Get 
+-- Get Throughput per stored GB
 SELECT 
-    AVG(gb_read_per_size) AS avg_gb_read_per_warehouse_size,
+    MEDIAN(scanbytes_per_estimated_size) AS median_gb_read_per_warehouse_size,
+    AVG(scanbytes_per_estimated_size) AS avg_gb_read_per_warehouse_size
 FROM (
   SELECT 
+    warehouseId,
+    (SUM(scanBytes) / NULLIF(AVG((scanBytes / NULLIF(scanAssignedFiles, 0)) * scanOriginalFiles), 0)) AS scanbytes_per_estimated_size
+  FROM 
+    'snowset-main.parquet/*.parquet'
+  GROUP BY 
+    warehouseId
+) AS gb_read_per_size;
+
+-- Outliers
+SELECT 
     warehouseId,
     (SUM(scanBytes) / NULLIF(AVG((scanBytes / NULLIF(scanAssignedFiles, 0)) * scanOriginalFiles), 0)) AS scanbytes_per_estimated_size
 FROM 
     'snowset-main.parquet/*.parquet'
 GROUP BY 
     warehouseId
-) AS gb_read_per_size;
-
+ORDER BY 
+    scanbytes_per_estimated_size DESC
+LIMIT 40;
