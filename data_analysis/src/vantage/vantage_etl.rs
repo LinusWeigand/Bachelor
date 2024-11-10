@@ -150,7 +150,7 @@ fn parse_throughput(throughput: &str) -> Option<f64> {
     return match parts.len() {
         2 => {
             return parts[0].parse::<f64>().ok();
-        },
+        }
         _ => None,
     };
 }

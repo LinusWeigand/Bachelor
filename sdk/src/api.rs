@@ -407,7 +407,6 @@ impl EC2Impl {
         let instance_market_options = InstanceMarketOptionsRequest::builder()
             .market_type(MarketType::Spot)
             .build();
-
         let mut run_instances_builder = self
             .client
             .run_instances()
