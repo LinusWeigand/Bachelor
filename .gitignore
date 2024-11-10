@@ -31,3 +31,5 @@ mvp/*.out
 .dll
 bench/
 .env
+
+/target
