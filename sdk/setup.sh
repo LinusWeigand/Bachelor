@@ -1,4 +1,4 @@
-udo yum install -y mdadm xfsprogs fio
+sudo yum install -y mdadm xfsprogs fio
 sudo mdadm --create /dev/md0 --level=5 --raid-devices=2 /dev/nvme1n1 /dev/nvme2n1
 sudo mkfs.xfs /dev/md0
 sudo mkdir /mnt/raid0

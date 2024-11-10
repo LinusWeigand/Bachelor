@@ -17,13 +17,14 @@ write_iolog=io
 [job1]
 numjobs=1
 
+
 [global]
 filename=/mnt/raid0/testfile
 rw=randrw
 rwmixread=80
 bs=512k
-size=1T
-iodepth=16
+size=100G
+iodepth=4
 direct=1
 runtime=180
 time_based
@@ -33,6 +34,9 @@ write_lat_log=lat
 write_hist_log=hist
 write_iops_log=iops
 write_iolog=io
+sync=1
+ramp_time=10s
+invalidate=1
 
 [job1]
-numjobs=4
+numjobs=1
