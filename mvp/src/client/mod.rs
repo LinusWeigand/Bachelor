@@ -13,7 +13,7 @@ use tokio::{
     time::Instant,
 };
 
-use crate::PARQUET_FOLDER;
+const PARQUET_FOLDER: &str = "./parquet_files/";
 
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -32,8 +32,11 @@ struct Args {
     #[arg(short, long)]
     mode: Mode,
 
-    #[arg(short, long, default_value_t = 60)]
+    #[arg(short, long, default_value_t = 1)]
     duration: u64,
+
+    #[arg(short, long, default_value_t = 100)]
+    parallel_clients: u32,
 }
 
 #[tokio::main]
@@ -43,35 +46,58 @@ async fn main() -> Result<(), Error> {
     let url = Arc::new(format!("http://{}/parquet", args.ip.to_string()));
 
     let end_time = Instant::now() + Duration::from_secs(args.duration);
+    let mut client_tasks = Vec::new();
+
+    for _ in 0..args.parallel_clients {
+        let client_clone = Arc::clone(&client);
+        let url_clone = Arc::clone(&url);
+        let mode = args.mode;
+        let duration = Duration::from_secs(args.duration);
+
+        let client_task = task::spawn(async move {
+            spawn_client(client_clone, url_clone, 0, mode, duration).await
+        });
+        client_tasks.push(client_task);
+    }
+    for client_task in client_tasks {
+        if let Err(err) = client_task.await {
+            eprintln!("Error in request: {:?}", err);
+        }
+    }
+    
+    Ok(())
+}
+
+async fn spawn_client(client: Arc<Client>, url: Arc<String>, file_counter_start: u32, mode: Mode, duration: Duration) {
+    let mut file_name_counter = file_counter_start;
     let mut tasks = Vec::new();
 
-    let mut rng = rand::thread_rng();
-    let mut file_name_counter = 0;
+    file_name_counter += 1;
+    let file_name = format!("test_file{}.parquet", file_name_counter);
+    let file_path = PathBuf::from(PARQUET_FOLDER).join("test_file.parquet");
 
-    while Instant::now() < end_time {
-        file_name_counter += 1;
-        let file_name = format!("test{}", file_name_counter);
-        let file_path = PathBuf::from(PARQUET_FOLDER).join(&file_name);
-        if args.mode == Mode::Send {
-            spawn_sender(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name, file_path);
-        } else if args.mode == Mode::Receive {
-            spawn_receiver(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name);
-        } else {
-            let num: f64 = rng.gen();
-            if num < 0.8 {
+    match mode {
+        Mode::Send => spawn_sender(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name, file_path),
+        Mode::Receive => spawn_receiver(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name),
+        Mode::Mixed => {
+            if sample_bernouli_var(0.8) {
                 spawn_sender(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name, file_path);
             } else {
                 spawn_receiver(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name);
             }
         }
     }
-
     for task in tasks {
         if let Err(err) = task.await {
             eprintln!("Error in request: {:?}", err);
         }
     }
-    Ok(())
+}
+
+fn sample_bernouli_var(theta: f64) -> bool {
+    let mut rng = rand::thread_rng();
+    let num: f64 = rng.gen();
+    num < theta
 }
 
 fn spawn_sender(
@@ -96,14 +122,18 @@ fn spawn_receiver(
 }
 
 async fn send_data_request(client: &Client, url: &str, file_name: &str, file_path: &PathBuf) -> Result<()> {
+    let url = format!("{}/{}", &url, &file_name);
+    println!("Making PUT request to url: {} and file path: {:?}", &url, &file_path);
     let mut file: File = File::open(file_path)
         .await
         .with_context(|| format!("Failed opening file at: {:?}", file_path))?;
+    println!("File opened");
     let mut file_contents = Vec::new();
     file.read_to_end(&mut file_contents)
         .await
         .with_context(|| format!("Failed reading file at: {:?}", file_path))?;
 
+    println!("File read");
     let part = Part::bytes(file_contents)
         .file_name(file_name.to_string());
 
@@ -121,6 +151,7 @@ async fn send_data_request(client: &Client, url: &str, file_name: &str, file_pat
 }
 
 async fn receive_data_request(client: &Client, url: &str, file_name: &str) -> Result<()> {
+    println!("Making GET request");
     let url = format!("{}/{}", &url, &file_name);
 
     let response = client
@@ -132,5 +163,6 @@ async fn receive_data_request(client: &Client, url: &str, file_name: &str) -> Re
     if !response.status().is_success() {
         return Err(anyhow::anyhow!("Request failed with status {}", response.status()));
     }
+
     Ok(())
 }

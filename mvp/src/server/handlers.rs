@@ -16,7 +16,6 @@ use tokio_util::io::ReaderStream;
 
 use crate::PARQUET_FOLDER;
 
-
 pub async fn health_checker_handler() -> impl IntoResponse {
     let response = json!({
         "status": "success",
@@ -28,8 +27,8 @@ pub async fn health_checker_handler() -> impl IntoResponse {
 pub async fn get_parquet_file(
     Path(file_name): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
+    println!("GET: {}", &file_name);
     let file_path = PathBuf::from(PARQUET_FOLDER).join(&*file_name);
-    
 
     match file_path.try_exists() {
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
@@ -58,6 +57,7 @@ pub async fn put_parquet_file(
     Path(file_name): Path<String>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, StatusCode> {
+    println!("PUT: {}", &file_name);
     if let Err(_) = create_dir_all(PARQUET_FOLDER).await {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
