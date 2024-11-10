@@ -1,3 +1,7 @@
+use std::{
+    env::current_dir, error::Error, fmt::format, fs::File, io::{self, BufRead}
+};
+
 fn read_log_file(file_path: &str, data_type: DataType) -> Result<Vec<(f64, f64)>, Box<dyn Error>> {
     let mut data = Vec::new();
     let file = File::open(file_path)?;
@@ -43,27 +47,23 @@ impl MetricData {
             &format!("./data/{}/bw.log", file_path)
         );
 
-        println!(
-            "Current working directory: {:?}",
-            std::env::current_dir().unwrap()
-        );
         let bw = read_log_file(
-            &format!("./data/latency/{}/bw.log", file_path),
+            &format!("./data/{}/bw.log", file_path),
             DataType::Throughput,
         )
         .unwrap();
         let iops = read_log_file(
-            &format!("./data/latency/{}/iops.log", file_path),
+            &format!("./data/{}/iops.log", file_path),
             DataType::IOPS,
         )
         .unwrap();
         let lat = read_log_file(
-            &format!("./data/latency/{}/lat.log", file_path),
+            &format!("./data/{}/lat.log", file_path),
             DataType::Latency,
         )
         .unwrap();
         let clat = read_log_file(
-            &format!("./data/latency/{}/clat.log", file_path),
+            &format!("./data/{}/clat.log", file_path),
             DataType::Latency,
         )
         .unwrap();

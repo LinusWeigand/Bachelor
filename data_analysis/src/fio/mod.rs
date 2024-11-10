@@ -75,17 +75,35 @@ async fn index() -> impl IntoResponse {
     let sequential_read_data = get_instance_metric_data("d3en.xlarge", 0, TestType::SequentialRead);
     let sequential_write_data =
         get_instance_metric_data("d3en.xlarge", 0, TestType::SequentialWrite);
+    let real_world_data = get_instance_metric_data("d3en.xlarge", 0, TestType::RealWorld);
+
+    let raid1_seq_read_data = get_instance_metric_data("d3en.xlarge", 1, TestType::SequentialRead);
 
     let chart_sets_html = vec![
         generate_chart_set_html(
-            "d3en xlarge Sequential Reads, 4MB Block size",
+            "RAID 0: d3en xlarge Sequential Reads, 4MB Block size",
             "chart1",
             &sequential_read_data,
         ),
         generate_chart_set_html(
-            "d3en xlarge Sequential Writes, 4MB Block size",
+            "RAID 0: d3en xlarge Sequential Writes, 4MB Block size",
             "chart2",
             &sequential_write_data,
+        ),
+        generate_chart_set_html(
+            "RAID 0: d3en xlarge (80/20), 512KiB Block size",
+            "chart3",
+            &real_world_data,
+        ),
+        generate_chart_set_html(
+            "RAID 1: d3en xlarge Sequential Reads, 4MB Block size",
+            "chart4",
+            &sequential_read_data,
+        ),
+        generate_chart_set_html(
+            "RAID 1: d3en xlarge Sequential Writes, 4MB Block size",
+            "chart5",
+            &sequential_read_data,
         ),
     ]
     .join("\n");

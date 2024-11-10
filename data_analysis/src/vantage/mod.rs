@@ -8,6 +8,8 @@ use axum::{
 };
 use tokio::main;
 use tower_http::compression::CompressionLayer;
+use vantage_etl::InstanceData;
+use vantage_plot::{get_bar_ebs_chart, get_bar_network_performance_per_gb_chart, get_bar_storage_chart, get_bar_throughput_chart, get_scatter_efficient_frontier, get_scatter_throughput_chart};
 
 #[main]
 async fn main() {
@@ -21,25 +23,17 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:5555").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
-fn generate_chart_set_html(
-    title: &str,
-    chart_prefix: &str,
-    data: &vantage_plot::InstanceData,
-) -> String {
+fn generate_chart_set_html(title: &str, chart_prefix: &str, data: &str) -> String {
     format!(
         r#"
-        <h1>Throughput & Cost Efficient Frontier</h1>
+        <h1>{}</h1>
         <div id="{chart_prefix}-container" class="chart-container"></div>
 
        <script>
-            const chart{chart_prefix} = initChart('{chart_prefix}', {data});
-        
+            const chart{chart_prefix} = initChart('{chart_prefix}-container', {data});
 
             window.addEventListener('resize', function() {{
-                chart{chart_prefix}_bw.resize();
-                chart{chart_prefix}_iops.resize();
-                chart{chart_prefix}_lat.resize();
-                chart{chart_prefix}_clat.resize();
+                chart{chart_prefix}.resize();
             }});
         </script>
         "#,
@@ -50,20 +44,32 @@ fn generate_chart_set_html(
 }
 
 async fn index() -> impl IntoResponse {
-    let sequential_read_data = get_instance_metric_data("d3en.xlarge", 0, TestType::SequentialRead);
-    let sequential_write_data =
-        get_instance_metric_data("d3en.xlarge", 0, TestType::SequentialWrite);
+    let data = InstanceData::new();
 
+    let throughput_per_dollar = get_bar_throughput_chart(&data);
+    let ec2_price_per_gb = get_bar_storage_chart(&data);
+    let ebs_price_per_gb = get_bar_ebs_chart();
+    let network_performance_per_gb = get_bar_network_performance_per_gb_chart(&data);
     let chart_sets_html = vec![
         generate_chart_set_html(
-            "d3en xlarge Sequential Reads, 4MB Block size",
-            "chart1",
-            &sequential_read_data,
+            "Throughput per Dollar (1 MB/s)",
+            "chart2",
+            &throughput_per_dollar
         ),
         generate_chart_set_html(
-            "d3en xlarge Sequential Writes, 4MB Block size",
-            "chart2",
-            &sequential_write_data,
+            "EC2 Cost per GB",
+            "chart3",
+            &ec2_price_per_gb
+        ),
+        generate_chart_set_html(
+            "EBS Cost per GB",
+            "chart4",
+            &ebs_price_per_gb
+        ),
+        generate_chart_set_html(
+            "Network Performance per GB",
+            "chart6",
+            &network_performance_per_gb
         ),
     ]
     .join("\n");
@@ -105,7 +111,7 @@ async fn index() -> impl IntoResponse {
                     font-family: Arial, sans-serif;
                 }}
                 h2 {{
-                    margin: 10px 0; 
+                    margin: 10px 0;
                     font-family: Arial, sans-serif;
                     text-align: center;
                 }}
@@ -126,7 +132,6 @@ async fn index() -> impl IntoResponse {
                     return chart;
                 }};
             </script>
-            <h1>RAID 0</h1>
             {chart_sets_html}
 
 

@@ -30,8 +30,8 @@ struct EC2Instance {
     #[serde(rename = "Linux Reserved cost")]
     linux_reserved_cost: String,
 
-    #[serde(rename = "Baseline throughput (MB/s, 128 KiB I/O)")]
-    baseline_throughput: Option<f64>,
+    #[serde(rename = "EBS Optimized: Baseline Throughput (128K)")]
+    baseline_throughput: String,
 }
 
 fn parse_vcpus(vcpus: &str) -> Option<(u32, Option<String>)> {
@@ -144,9 +144,16 @@ fn parse_price(on_demand: &str) -> Option<f64> {
     };
 }
 
-// fn hourly_to_monthly(hourly: f64) -> f64 {
-//     hourly * 24. * 30.432098765432099
-// }
+fn parse_throughput(throughput: &str) -> Option<f64> {
+    let parts: Vec<&str> = throughput.split_whitespace().collect();
+
+    return match parts.len() {
+        2 => {
+            return parts[0].parse::<f64>().ok();
+        },
+        _ => None,
+    };
+}
 
 fn read_csv(file_path: &str) -> Result<Vec<EC2Instance>, Box<dyn Error>> {
     let mut reader = ReaderBuilder::new()
@@ -180,7 +187,7 @@ impl InstanceData {
                 None => continue,
                 Some(v) => v,
             };
-            let baseline_throughput = match instance.baseline_throughput {
+            let baseline_throughput = match parse_throughput(&instance.baseline_throughput) {
                 None => continue,
                 Some(v) => v,
             };
@@ -250,7 +257,7 @@ impl InstanceData {
                 None => continue,
                 Some(v) => v,
             };
-            let baseline_throughput = match instance.baseline_throughput {
+            let baseline_throughput = match parse_throughput(&instance.baseline_throughput) {
                 None => continue,
                 Some(v) => v,
             };
@@ -264,7 +271,7 @@ impl InstanceData {
         let mut combinations = Vec::new();
         let storage = 100_000;
         for instance in &self.instances {
-            let baseline_throughput = match instance.baseline_throughput {
+            let baseline_throughput = match parse_throughput(&instance.baseline_throughput) {
                 None => continue,
                 Some(v) => v,
             };

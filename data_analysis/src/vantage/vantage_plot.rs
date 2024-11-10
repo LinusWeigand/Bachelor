@@ -1,13 +1,12 @@
+use super::vantage_etl::InstanceData;
 use charming::component::FilterMode;
 use charming::df;
-use charming::element::{ItemStyle};
+use charming::element::ItemStyle;
 use charming::{component::Axis, element::Tooltip, series::Scatter, Chart};
 use charming::{component::DataZoom, datatype::DataPointItem, element::Formatter};
 use charming::{element::AxisType, series::Bar};
-use super::vantage_etl::InstanceData;
 
-
-fn get_scatter_throughput_chart(instance_data: &InstanceData) -> String {
+pub fn get_scatter_throughput_chart(instance_data: &InstanceData) -> String {
     let data = instance_data.get_cost_throughput();
     let chart = Chart::new()
         .x_axis(Axis::new().name("Linux Reserved Price"))
@@ -25,7 +24,7 @@ fn get_scatter_throughput_chart(instance_data: &InstanceData) -> String {
     options
 }
 
-fn get_scatter_efficient_frontier(instance_data: &InstanceData) -> String {
+pub fn get_scatter_efficient_frontier(instance_data: &InstanceData) -> String {
     let data = instance_data.get_efficient_frontier();
     let chart = Chart::new()
         .x_axis(Axis::new().name("Total Cost Per Month"))
@@ -48,7 +47,7 @@ fn get_scatter_efficient_frontier(instance_data: &InstanceData) -> String {
     options
 }
 
-fn get_bar_throughput_chart(instance_data: &InstanceData) -> String {
+pub fn get_bar_throughput_chart(instance_data: &InstanceData) -> String {
     let data = instance_data.get_cost_per_throughput();
     let (names, values): (Vec<String>, Vec<f64>) = data.into_iter().map(|(s, f)| (s, f)).unzip();
     let chart = Chart::new()
@@ -78,7 +77,8 @@ fn get_bar_throughput_chart(instance_data: &InstanceData) -> String {
     let options = serde_json::to_string(&chart).unwrap_or_default();
     options
 }
-fn get_bar_network_performance_per_gb_chart(instance_data: &InstanceData) -> String {
+
+pub fn get_bar_network_performance_per_gb_chart(instance_data: &InstanceData) -> String {
     let data = instance_data.get_network_performance_per_gb();
     let (names, values): (Vec<String>, Vec<f64>) = data.into_iter().map(|(s, f)| (s, f)).unzip();
     let chart = Chart::new()
@@ -109,7 +109,7 @@ fn get_bar_network_performance_per_gb_chart(instance_data: &InstanceData) -> Str
     options
 }
 
-fn get_bar_ebs_chart() -> String {
+pub fn get_bar_ebs_chart() -> String {
     let chart = Chart::new()
         .x_axis(
             Axis::new()
@@ -147,8 +147,7 @@ fn get_bar_ebs_chart() -> String {
     let options = serde_json::to_string(&chart).unwrap_or_default();
     options
 }
-
-fn get_bar_storage_chart(instance_data: &InstanceData) -> String {
+pub fn get_bar_storage_chart(instance_data: &InstanceData) -> String {
     let data = instance_data.get_cost_per_gb();
     let (names, values): (Vec<String>, Vec<f64>) = data.into_iter().map(|(s, f)| (s, f)).unzip();
     let chart = Chart::new()
@@ -166,4 +165,3 @@ fn get_bar_storage_chart(instance_data: &InstanceData) -> String {
     let options = serde_json::to_string(&chart).unwrap_or_default();
     options
 }
-
