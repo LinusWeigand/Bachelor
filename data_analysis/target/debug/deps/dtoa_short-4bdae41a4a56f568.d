@@ -1,5 +1,0 @@
-/Users/linusweigand/Universität/7.Semester/Bachelor/price_analysis/target/debug/deps/libdtoa_short-4bdae41a4a56f568.rmeta: /Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/dtoa-short-0.3.5/src/lib.rs
-
-/Users/linusweigand/Universität/7.Semester/Bachelor/price_analysis/target/debug/deps/dtoa_short-4bdae41a4a56f568.d: /Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/dtoa-short-0.3.5/src/lib.rs
-
-/Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/dtoa-short-0.3.5/src/lib.rs:

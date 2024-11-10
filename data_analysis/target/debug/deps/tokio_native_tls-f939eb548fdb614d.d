@@ -1,7 +1,0 @@
-/Users/linusweigand/Universität/7.Semester/Bachelor/price_analysis/target/debug/deps/libtokio_native_tls-f939eb548fdb614d.rmeta: /Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-native-tls-0.3.1/src/lib.rs
-
-/Users/linusweigand/Universität/7.Semester/Bachelor/price_analysis/target/debug/deps/libtokio_native_tls-f939eb548fdb614d.rlib: /Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-native-tls-0.3.1/src/lib.rs
-
-/Users/linusweigand/Universität/7.Semester/Bachelor/price_analysis/target/debug/deps/tokio_native_tls-f939eb548fdb614d.d: /Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-native-tls-0.3.1/src/lib.rs
-
-/Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-native-tls-0.3.1/src/lib.rs:

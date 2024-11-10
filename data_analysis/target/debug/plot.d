@@ -1,1 +1,0 @@
-/Users/linusweigand/Universität/7.Semester/Bachelor/data_analysis/target/debug/plot: /Users/linusweigand/Universität/7.Semester/Bachelor/data_analysis/src/plot.rs /Users/linusweigand/Universität/7.Semester/Bachelor/data_analysis/src/utils.rs

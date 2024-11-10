@@ -1,8 +1,0 @@
-/Users/linusweigand/Universität/7.Semester/Bachelor/iterationen/target/debug/deps/libadler2-57cd08adc6a6b83c.rmeta: /Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/adler2-2.0.0/src/lib.rs /Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/adler2-2.0.0/src/algo.rs
-
-/Users/linusweigand/Universität/7.Semester/Bachelor/iterationen/target/debug/deps/libadler2-57cd08adc6a6b83c.rlib: /Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/adler2-2.0.0/src/lib.rs /Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/adler2-2.0.0/src/algo.rs
-
-/Users/linusweigand/Universität/7.Semester/Bachelor/iterationen/target/debug/deps/adler2-57cd08adc6a6b83c.d: /Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/adler2-2.0.0/src/lib.rs /Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/adler2-2.0.0/src/algo.rs
-
-/Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/adler2-2.0.0/src/lib.rs:
-/Users/linusweigand/.cargo/registry/src/index.crates.io-6f17d22bba15001f/adler2-2.0.0/src/algo.rs:
