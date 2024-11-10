@@ -13,8 +13,9 @@ use aws_sdk_ec2::{
     },
     types::{
         BlockDeviceMapping, DomainType, EbsBlockDevice, Filter, IamInstanceProfileSpecification,
-        Image, Instance, InstanceStateName, InstanceType, IpPermission, IpRange, KeyPairInfo,
-        SecurityGroup, Tag,
+        Image, Instance, InstanceMarketOptionsRequest, InstanceStateName, InstanceType,
+        IpPermission, IpRange, KeyPairInfo, MarketType, SecurityGroup, SpotMarketOptions,
+        SpotOptionsRequest, Tag,
     },
     Client as EC2Client,
 };
@@ -402,6 +403,10 @@ impl EC2Impl {
         //         )
         //         .build(),
         // ];
+        //
+        let instance_market_options = InstanceMarketOptionsRequest::builder()
+            .market_type(MarketType::Spot)
+            .build();
 
         let mut run_instances_builder = self
             .client
@@ -420,6 +425,7 @@ impl EC2Impl {
                     .collect(),
             ))
             // .set_block_device_mappings(Some(ebs_volumes))
+            .instance_market_options(instance_market_options)
             .min_count(1)
             .max_count(1);
 
