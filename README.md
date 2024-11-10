@@ -8,7 +8,7 @@ There are three binaries:
 1. Fio: Plots the measured metrics from fio
 `cargo run --bin fio`
 2. Vantage: Plots the Data from Vantage and compares EC2 Instances and EBS Volumes
-````cargo run --bin vantage`
+`cargo run --bin vantage`
 3. Snowset: Plots different Graphs from analysing the Snowset Dataset
 `cargo run --bin snowset`
 
