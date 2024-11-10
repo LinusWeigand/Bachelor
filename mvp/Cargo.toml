@@ -19,6 +19,9 @@ anyhow = "1.0.93"
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
 
+[[lib]]
+name = "mvp"
+
 [[bin]]
 name = "server"
 path = "src/server/mod.rs"

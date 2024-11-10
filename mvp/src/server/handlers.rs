@@ -14,7 +14,8 @@ use tokio::{
 };
 use tokio_util::io::ReaderStream;
 
-use super::PARQUET_FOLDER;
+use crate::PARQUET_FOLDER;
+
 
 pub async fn health_checker_handler() -> impl IntoResponse {
     let response = json!({

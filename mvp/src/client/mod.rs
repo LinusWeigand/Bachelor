@@ -2,15 +2,19 @@ use clap::{Parser, ValueEnum};
 use rand::Rng;
 use reqwest::multipart::{Form, Part};
 use reqwest::{Client};
-use tokio::fs::{self, File};
+use tokio::fs::{File};
 use tokio::io::AsyncReadExt;
-use std::{path::Path, sync::Arc};
+use std::path::PathBuf;
+use std::{sync::Arc};
 use std::time::Duration;
+use anyhow::{Error, Context, Result};
 use tokio::{
     task::{self, JoinHandle},
     time::Instant,
 };
-use anyhow::{Error, Context, Result};
+
+use crate::PARQUET_FOLDER;
+
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 pub enum Mode {
@@ -42,18 +46,22 @@ async fn main() -> Result<(), Error> {
     let mut tasks = Vec::new();
 
     let mut rng = rand::thread_rng();
+    let mut file_name_counter = 0;
 
     while Instant::now() < end_time {
+        file_name_counter += 1;
+        let file_name = format!("test{}", file_name_counter);
+        let file_path = PathBuf::from(PARQUET_FOLDER).join(&file_name);
         if args.mode == Mode::Send {
-            spawn_sender(Arc::clone(&client), Arc::clone(&url), &mut tasks);
+            spawn_sender(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name, file_path);
         } else if args.mode == Mode::Receive {
-            spawn_receiver(Arc::clone(&client), Arc::clone(&url), &mut tasks);
+            spawn_receiver(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name);
         } else {
             let num: f64 = rng.gen();
             if num < 0.8 {
-                spawn_sender(Arc::clone(&client), Arc::clone(&url), &mut tasks);
+                spawn_sender(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name, file_path);
             } else {
-                spawn_receiver(Arc::clone(&client), Arc::clone(&url), &mut tasks);
+                spawn_receiver(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name);
             }
         }
     }
@@ -70,8 +78,10 @@ fn spawn_sender(
     client: Arc<Client>,
     url: Arc<String>,
     tasks: &mut Vec<JoinHandle<Result<(), Error>>>,
+    file_name: String,
+    file_path: PathBuf,
 ) {
-    let task = task::spawn(async move { send_data_request(&client, &url).await });
+    let task = task::spawn(async move { send_data_request(&client, &url, &file_name, &file_path).await });
     tasks.push(task);
 }
 
@@ -79,12 +89,13 @@ fn spawn_receiver(
     client: Arc<Client>,
     url: Arc<String>,
     tasks: &mut Vec<JoinHandle<Result<(), Error>>>,
+    file_name: String,
 ) {
-    let task = task::spawn(async move { receive_data_request(&client, &url).await });
+    let task = task::spawn(async move { receive_data_request(&client, &url, &file_name).await });
     tasks.push(task);
 }
 
-async fn send_data_request(client: &Client, url: &str, file_name: &str, file_path: &Path) -> Result<()> {
+async fn send_data_request(client: &Client, url: &str, file_name: &str, file_path: &PathBuf) -> Result<()> {
     let mut file: File = File::open(file_path)
         .await
         .with_context(|| format!("Failed opening file at: {:?}", file_path))?;
