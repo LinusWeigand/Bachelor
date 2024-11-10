@@ -8,10 +8,14 @@ use aws_sdk_ec2::{
     client::Waiters,
     error::ProvideErrorMetadata,
     operation::{
-        allocate_address::AllocateAddressOutput, associate_address::AssociateAddressOutput, run_instances,
+        allocate_address::AllocateAddressOutput, associate_address::AssociateAddressOutput,
+        run_instances,
     },
     types::{
-        BlockDeviceMapping, DomainType, EbsBlockDevice, Filter, IamInstanceProfileSpecification, Image, Instance, InstanceStateName, InstanceType, IpPermission, IpRange, KeyPairInfo, SecurityGroup, Tag
+        BlockDeviceMapping, DomainType, EbsBlockDevice, Filter, IamInstanceProfileSpecification,
+        Image, Instance, InstanceMarketOptionsRequest, InstanceStateName, InstanceType,
+        IpPermission, IpRange, KeyPairInfo, MarketType, SecurityGroup, SpotMarketOptions,
+        SpotOptionsRequest, Tag,
     },
     Client as EC2Client,
 };
@@ -27,7 +31,6 @@ impl EC2Impl {
     pub fn new(client: EC2Client) -> Self {
         EC2Impl { client }
     }
-
 
     //Method added
     pub async fn get_instance_public_ip(
@@ -63,21 +66,22 @@ impl EC2Impl {
         ingress_ip: Ipv4Addr,
         port: i32,
     ) -> Result<(), EC2Error> {
-            return match self.authorize_security_group_ingress(group_id, vec![ingress_ip], port)
+        return match self
+            .authorize_security_group_ingress(group_id, vec![ingress_ip], port)
             .await
         {
             Ok(_) => Ok(()),
             Err(e) => {
-            let error_message = e.to_string(); 
+                let error_message = e.to_string();
 
-            if error_message.contains("InvalidPermission.Duplicate") {
-                println!("The rule already exists. Skipping...");
-                Ok(())
-            } else {
-                Err(e)
+                if error_message.contains("InvalidPermission.Duplicate") {
+                    println!("The rule already exists. Skipping...");
+                    Ok(())
+                } else {
+                    Err(e)
+                }
             }
-            }
-        }
+        };
     }
 
     //Method added
@@ -128,7 +132,7 @@ impl EC2Impl {
     //Method added
     pub async fn get_instance_id_by_name_if_running(
         &self,
-        instance_name: &str
+        instance_name: &str,
     ) -> Result<Option<String>, EC2Error> {
         let name_filter = Filter::builder()
             .name("tag:Name")
@@ -159,7 +163,7 @@ impl EC2Impl {
             })
         {
             if let Some(instance_id) = instance.instance_id() {
-                return Ok(Some(instance_id.to_string()))
+                return Ok(Some(instance_id.to_string()));
             }
         }
         Ok(None)
@@ -370,27 +374,39 @@ impl EC2Impl {
         name: &str,
         iam_instance_profile: Option<&str>,
     ) -> Result<String, EC2Error> {
-        let ebs_volumes = vec![
-            BlockDeviceMapping::builder()
-                .device_name("/dev/xvda")
-                .ebs(
-                    EbsBlockDevice::builder()
-                        .volume_size(8)
-                        .volume_type(aws_sdk_ec2::types::VolumeType::Standard)
-                        .build(),
-                )
-                .build(),
-            BlockDeviceMapping::builder()
-                .device_name("/dev/xvdb")
-                .ebs(
-                    EbsBlockDevice::builder()
-                        .volume_size(125)
-                        .volume_type(aws_sdk_ec2::types::VolumeType::Sc1)
-                        .build(),
-                )
-                .build(),
-        ];
-
+        // let ebs_volumes = vec![
+        //     BlockDeviceMapping::builder()
+        //         .device_name("/dev/xvda")
+        //         .ebs(
+        //             EbsBlockDevice::builder()
+        //                 .volume_size(8)
+        //                 .volume_type(aws_sdk_ec2::types::VolumeType::Standard)
+        //                 .build(),
+        //         )
+        //         .build(),
+        //     BlockDeviceMapping::builder()
+        //         .device_name("/dev/xvdb")
+        //         .ebs(
+        //             EbsBlockDevice::builder()
+        //                 .volume_size(125)
+        //                 .volume_type(aws_sdk_ec2::types::VolumeType::Sc1)
+        //                 .build(),
+        //         )
+        //         .build(),
+        //     BlockDeviceMapping::builder()
+        //         .device_name("/dev/xvdc")
+        //         .ebs(
+        //             EbsBlockDevice::builder()
+        //                 .volume_size(125)
+        //                 .volume_type(aws_sdk_ec2::types::VolumeType::Sc1)
+        //                 .build(),
+        //         )
+        //         .build(),
+        // ];
+        //
+        let instance_market_options = InstanceMarketOptionsRequest::builder()
+            .market_type(MarketType::Spot)
+            .build();
         let mut run_instances_builder = self
             .client
             .run_instances()
@@ -407,7 +423,8 @@ impl EC2Impl {
                     .filter_map(|sg| sg.group_id.clone())
                     .collect(),
             ))
-            .set_block_device_mappings(Some(ebs_volumes))
+            // .set_block_device_mappings(Some(ebs_volumes))
+            .instance_market_options(instance_market_options)
             .min_count(1)
             .max_count(1);
 
@@ -415,7 +432,8 @@ impl EC2Impl {
             let iam_instance_profile = IamInstanceProfileSpecification::builder()
                 .name(profile_name)
                 .build();
-            run_instances_builder = run_instances_builder.iam_instance_profile(iam_instance_profile);
+            run_instances_builder =
+                run_instances_builder.iam_instance_profile(iam_instance_profile);
         }
 
         let run_instances = run_instances_builder.send().await?;

@@ -1,4 +1,8 @@
-use std::error::Error;
+use std::{
+    error::Error,
+    fs::File,
+    io::{self, BufRead},
+};
 
 use csv::ReaderBuilder;
 use serde::Deserialize;
@@ -26,8 +30,8 @@ struct EC2Instance {
     #[serde(rename = "Linux Reserved cost")]
     linux_reserved_cost: String,
 
-    #[serde(rename = "Baseline throughput (MB/s, 128 KiB I/O)")]
-    baseline_throughput: Option<f64>,
+    #[serde(rename = "EBS Optimized: Baseline Throughput (128K)")]
+    baseline_throughput: String,
 }
 
 fn parse_vcpus(vcpus: &str) -> Option<(u32, Option<String>)> {
@@ -140,8 +144,15 @@ fn parse_price(on_demand: &str) -> Option<f64> {
     };
 }
 
-fn hourly_to_monthly(hourly: f64) -> f64 {
-    hourly * 24. * 30.432098765432099
+fn parse_throughput(throughput: &str) -> Option<f64> {
+    let parts: Vec<&str> = throughput.split_whitespace().collect();
+
+    return match parts.len() {
+        2 => {
+            return parts[0].parse::<f64>().ok();
+        }
+        _ => None,
+    };
 }
 
 fn read_csv(file_path: &str) -> Result<Vec<EC2Instance>, Box<dyn Error>> {
@@ -159,14 +170,14 @@ fn read_csv(file_path: &str) -> Result<Vec<EC2Instance>, Box<dyn Error>> {
     Ok(instances)
 }
 
-pub struct Data {
+pub struct InstanceData {
     instances: Vec<EC2Instance>,
 }
 
-impl Data {
-    pub fn new() -> Data {
+impl InstanceData {
+    pub fn new() -> InstanceData {
         let instances = read_csv("./frankfurt.csv").unwrap();
-        Data { instances }
+        InstanceData { instances }
     }
 
     pub fn get_cost_throughput(&self) -> Vec<(String, f64, f64)> {
@@ -174,9 +185,9 @@ impl Data {
         for instance in &self.instances {
             let price = match parse_price(&instance.linux_reserved_cost) {
                 None => continue,
-                Some(v) => hourly_to_monthly(v),
+                Some(v) => v,
             };
-            let baseline_throughput = match instance.baseline_throughput {
+            let baseline_throughput = match parse_throughput(&instance.baseline_throughput) {
                 None => continue,
                 Some(v) => v,
             };
@@ -190,7 +201,7 @@ impl Data {
         for instance in &self.instances {
             let price = match parse_price(&instance.linux_reserved_cost) {
                 None => continue,
-                Some(v) => hourly_to_monthly(v),
+                Some(v) => v,
             };
 
             let storage = match parse_storage(&instance.storage) {
@@ -198,12 +209,41 @@ impl Data {
                 Some(v) => v,
             };
 
-            if (price / storage.0 as f64) > 100. {
-                continue;
-            }
+            // if (price / storage.0 as f64) > 100. {
+            //     continue;
+            // }
             data_points.push((
                 format!("{} {}", instance.api_name.clone(), storage.1),
                 price / (storage.0 as f64),
+            ));
+        }
+        data_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        data_points
+    }
+
+    pub fn get_network_performance_per_gb(&self) -> Vec<(String, f64)> {
+        let mut data_points: Vec<(String, f64)> = Vec::new();
+        for instance in &self.instances {
+            if !instance.api_name.trim().starts_with("d3en") {
+                continue;
+            }
+            let network_performance = match parse_network_performance(&instance.network_performance)
+            {
+                None => continue,
+                Some(v) => v,
+            };
+
+            let storage = match parse_storage(&instance.storage) {
+                None => continue,
+                Some(v) => v,
+            };
+
+            // if (price / storage.0 as f64) > 100. {
+            //     continue;
+            // }
+            data_points.push((
+                format!("{} {}", instance.api_name.clone(), storage.1),
+                network_performance / (storage.0 as f64),
             ));
         }
         data_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
@@ -215,9 +255,9 @@ impl Data {
         for instance in &self.instances {
             let price = match parse_price(&instance.linux_reserved_cost) {
                 None => continue,
-                Some(v) => hourly_to_monthly(v),
+                Some(v) => v,
             };
-            let baseline_throughput = match instance.baseline_throughput {
+            let baseline_throughput = match parse_throughput(&instance.baseline_throughput) {
                 None => continue,
                 Some(v) => v,
             };
@@ -231,13 +271,13 @@ impl Data {
         let mut combinations = Vec::new();
         let storage = 100_000;
         for instance in &self.instances {
-            let baseline_throughput = match instance.baseline_throughput {
+            let baseline_throughput = match parse_throughput(&instance.baseline_throughput) {
                 None => continue,
                 Some(v) => v,
             };
             let price = match parse_price(&instance.linux_reserved_cost) {
                 None => continue,
-                Some(v) => hourly_to_monthly(v),
+                Some(v) => v,
             };
 
             let storage_per_instance = match parse_storage(&instance.storage) {
@@ -281,9 +321,9 @@ impl Data {
                     + min_instances as f64 * price
                     + min_instances as f64 * 8. * 0.04575; //Root St1 Volume
 
-                if total_cost_per_month > 2250. {
-                    continue;
-                }
+                // if total_cost_per_month > 2250. {
+                //     continue;
+                // }
 
                 let max_throughput_per_disk = 250.;
                 let disk_throughput: f64 = max_throughput_per_disk * disk_count as f64;
