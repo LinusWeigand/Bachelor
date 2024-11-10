@@ -1,22 +1,27 @@
+data_analysis/target
 data_analysis/target/
 data_analysis/Cargo.lock
 data_analysis/**/doc/
 data_analysis/**/.rust-analyzer
 data_analysis/*.out
 
+data_analysis/snowset-main.parquet/
+data_analysis/snowset-main.parquet
 
-
-ec2/target/
-ec2/Cargo.lock
-ec2/**/doc/
-ec2/**/.rust-analyzer
-ec2/*.out
+sdk/target/
+sdk/target
+sdk/Cargo.lock
+sdk/**/doc/
+sdk/**/.rust-analyzer
+sdk/*.out
 
 mvp/target/
+mvp/target
 mvp/Cargo.lock
 mvp/**/doc/
 mvp/**/.rust-analyzer
 mvp/*.out
+
 .DS_Store
 *.bak
 *.tmp
