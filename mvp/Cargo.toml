@@ -10,7 +10,7 @@ tokio = { version = "1.40.0", features = ["full"] }
 serde_json = "1.0.128"
 parquet = "53.1.0"
 tokio-util = { version = "0.7.12", features = ["io"] }
-reqwest = { version = "0.12.9", features = ["json", "multipart"] }
+reqwest = { version = "0.12.9", features = ["json", "multipart", "rustls-tls"], default-features = false }
 dotenv = "0.15.0"
 clap = { version = "4.5.20", features = ["derive"] }
 rand = "0.8.5"
