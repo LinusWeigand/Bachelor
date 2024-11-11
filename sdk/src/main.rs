@@ -1,23 +1,29 @@
+pub mod ec2;
+pub mod ip;
+pub mod keypair;
+pub mod security_rules;
+pub mod ssm;
 pub mod utils;
-pub mod api;
+pub mod vpc;
 
 use aws_config::{meta::region::RegionProviderChain, Region};
-use aws_sdk_ec2::{
-    types::{InstanceType},
-    Client as EC2Client,
+use aws_sdk_ec2::{types::InstanceType, Client as EC2Client};
+use ip::get_public_ip;
+use keypair::{create_key_pair, save_private_key};
+use ssm::get_latest_ami_id;
+use std::{error::Error, net::Ipv4Addr, time::Duration};
+use utils::{setup_connection, EC2Impl};
+use vpc::{
+    add_igw_route_if_not_exists, attach_internet_gateway_if_not_exists, enable_auto_assign_ip
 };
-use utils::{create_key_pair, get_latest_ami_id, get_public_ip, save_private_key, setup_connection};
-use std::{
-    error::Error,
-    net::Ipv4Addr,
-    thread,
-    time::Duration,
-};
-use api::EC2Impl;
 
-const INSTANCE_NAME: &str = "MVP";
-const KEY_PAIR_NAME: &str = "mvp-key-pair";
+const INSTANCE_NAME: &str = "mvp-server";
+const KEY_PAIR_NAME: &str = "mvp-key-pair-server";
+
 const SECURITY_GROUP_NAME: &str = "mvp-security-group";
+const VPC_NAME: &str = "mvp-vpc";
+const SUBNET_NAME: &str = "mvp-subnet";
+
 const SSM_ROLE_NAME: &str = "EC2SSMRole";
 
 #[tokio::main]
@@ -29,40 +35,48 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let ec2 = EC2Impl::new(ec2_client);
 
     run(&ec2).await?;
-    setup_connection(&ec2).await?;
+    setup_connection(&ec2, INSTANCE_NAME).await?;
     Ok(())
 }
 
-
-
 async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
-    //Create Security Group
+    println!("Creating VPC & Subnet...");
+    let vpc = ec2.create_vpc_if_not_exists(VPC_NAME).await?;
+    let subnet = ec2.create_subnet_if_not_exists(SUBNET_NAME, vpc.vpc_id().unwrap()).await?;
+    let vpc_id = vpc.vpc_id().unwrap();
+    let subnet_id = subnet.subnet_id().unwrap();
+
+    println!("Creating Internet Gateway & Route in Route Table...");
+    let igw_id = attach_internet_gateway_if_not_exists(&ec2, vpc_id).await?;
+    add_igw_route_if_not_exists(&ec2, vpc_id, &igw_id).await?;
+
+    println!("Enabling Ip Auto Assign...");
+    enable_auto_assign_ip(&ec2, subnet_id).await?;
+
+    println!("Creating Security Group...");
     let security_group = ec2
-        .create_security_group_if_not_exists(SECURITY_GROUP_NAME, "Mvp Security Group for SSH")
+        .create_security_group_if_not_exists(
+            SECURITY_GROUP_NAME,
+            "Mvp Security Group for SSH",
+            vpc_id,
+        )
         .await?;
-    println!("Created Security Group: {:#?}", security_group);
 
-    //Create Key Pair
-    let key_pair_name = "mvp-key-pair";
-    let (key_pair_info, private_key) = create_key_pair(&ec2).await?;
-    println!("Created Key Pair: {:#?}", key_pair_info);
-    println!("Private Key Material: \n{}", private_key);
+    println!("Creating Key Pair...");
+    let (key_pair_info, private_key) = create_key_pair(&ec2, KEY_PAIR_NAME).await?;
 
-    //Save Private Key
-    save_private_key(&key_pair_name, &private_key)?;
+    println!("Saving private Key...");
+    save_private_key(KEY_PAIR_NAME, &private_key)?;
 
-    //Open Ports 22 and 8000
+    println!("Open Ports 22 & 80...");
     let public_ip = get_public_ip().await?;
-    println!("Public Ip: {}", public_ip);
     let ingress_ip: Ipv4Addr = public_ip.parse().unwrap();
-    let cidr_ip = format!("{}/32", ingress_ip);
     ec2.add_ingress_rule_if_not_exists(&security_group.group_id().unwrap(), ingress_ip, 22)
         .await?;
-    ec2.add_ingress_rule_if_not_exists(&security_group.group_id().unwrap(), ingress_ip, 8000)
+    ec2.add_ingress_rule_if_not_exists(&security_group.group_id().unwrap(), ingress_ip, 80)
         .await?;
-    println!("Authorized SSH ingress from IP: {}", cidr_ip);
 
-    //Create Instance
+    println!("Creating Instance...");
     let ami_id = get_latest_ami_id().await?;
     let instance_type = InstanceType::D3enXlarge;
     let instance_id = ec2
@@ -72,15 +86,13 @@ async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
             &key_pair_info,
             vec![&security_group],
             INSTANCE_NAME,
+            subnet_id,
             Some(SSM_ROLE_NAME),
         )
         .await?;
     println!("Launched EC2 instance with ID: {}", instance_id);
-    // ec2.wait_for_instance_ready(&instance_id, Some(Duration::from_secs(120)))
-    //     .await?;
-    thread::sleep(Duration::from_secs(10));
+    ec2.wait_for_instance_ready(&instance_id, Some(Duration::from_secs(120)))
+        .await?;
     println!("EC2 Instance is ready!");
-
     Ok(())
 }
-
