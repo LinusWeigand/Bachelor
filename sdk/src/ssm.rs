@@ -1,12 +1,16 @@
 use aws_sdk_ssm::Client as SSMClient;
 use std::error::Error;
 
-pub async fn get_latest_ami_id() -> Result<String, Box<dyn Error>> {
+use crate::Arch;
+
+pub async fn get_latest_ami_id(arch: Arch) -> Result<String, Box<dyn Error>> {
     let config = aws_config::load_from_env().await;
     let ssm_client = SSMClient::new(&config);
 
-    // let ami_param_name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"; // ARM
-    let ami_param_name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"; //x_86
+    let ami_param_name = match arch {
+        Arch::ARM => "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64",
+        Arch::X86_64 => "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64",
+    };
     let ami_param = ssm_client
         .get_parameter()
         .name(ami_param_name)

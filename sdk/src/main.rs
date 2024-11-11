@@ -17,9 +17,17 @@ use vpc::{
     add_igw_route_if_not_exists, attach_internet_gateway_if_not_exists, enable_auto_assign_ip
 };
 
-const INSTANCE_NAME: &str = "mvp-server";
-const KEY_PAIR_NAME: &str = "mvp-key-pair-server";
+pub enum Arch {
+    ARM,
+    X86_64
+}
 
+const INSTANCE_NAME: &str = "mvp-clien";
+const KEY_PAIR_NAME: &str = "mvp-key-pair-client";
+
+// Depends on Instance (d3en is x86_64)
+const ARCH: Arch = Arch::X86_64;
+const INSTANCE_TYPE: InstanceType = InstanceType::D3en4xlarge;
 const SECURITY_GROUP_NAME: &str = "mvp-security-group";
 const VPC_NAME: &str = "mvp-vpc";
 const SUBNET_NAME: &str = "mvp-subnet";
@@ -77,12 +85,11 @@ async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
         .await?;
 
     println!("Creating Instance...");
-    let ami_id = get_latest_ami_id().await?;
-    let instance_type = InstanceType::D3enXlarge;
+    let ami_id = get_latest_ami_id(ARCH).await?;
     let instance_id = ec2
         .create_instance(
             ami_id.as_str(),
-            instance_type,
+            INSTANCE_TYPE,
             &key_pair_info,
             vec![&security_group],
             INSTANCE_NAME,
