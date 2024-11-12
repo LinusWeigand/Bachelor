@@ -33,3 +33,5 @@ bench/
 .env
 
 /target
+/snowset-main.parquet
+/snowset-main.parquet/
