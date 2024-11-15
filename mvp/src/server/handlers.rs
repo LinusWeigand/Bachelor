@@ -57,7 +57,7 @@ pub async fn put_parquet_file(
     Path(file_name): Path<String>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, StatusCode> {
-    println!("GET: {}", &file_name);
+    println!("PUT: {}", &file_name);
     if let Err(_) = create_dir_all(PARQUET_FOLDER).await {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
