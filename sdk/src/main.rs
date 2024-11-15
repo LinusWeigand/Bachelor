@@ -14,15 +14,15 @@ use ssm::get_latest_ami_id;
 use std::{error::Error, net::Ipv4Addr, time::Duration};
 use utils::{setup_connection, EC2Impl};
 use vpc::{
-    add_igw_route_if_not_exists, attach_internet_gateway_if_not_exists, enable_auto_assign_ip
+    add_igw_route_if_not_exists, attach_internet_gateway_if_not_exists, enable_auto_assign_ip,
 };
 
 pub enum Arch {
     ARM,
-    X86_64
+    X86_64,
 }
 
-const INSTANCE_NAME: &str = "mvp-clien";
+const INSTANCE_NAME: &str = "mvp-client";
 const KEY_PAIR_NAME: &str = "mvp-key-pair-client";
 
 // Depends on Instance (d3en is x86_64)
@@ -42,7 +42,9 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let ec2_client = EC2Client::new(&config);
     let ec2 = EC2Impl::new(ec2_client);
 
+
     run(&ec2).await?;
+    tokio::time::sleep(Duration::from_secs(10)).await;
     setup_connection(&ec2, INSTANCE_NAME).await?;
     Ok(())
 }
@@ -50,7 +52,9 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
 async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
     println!("Creating VPC & Subnet...");
     let vpc = ec2.create_vpc_if_not_exists(VPC_NAME).await?;
-    let subnet = ec2.create_subnet_if_not_exists(SUBNET_NAME, vpc.vpc_id().unwrap()).await?;
+    let subnet = ec2
+        .create_subnet_if_not_exists(SUBNET_NAME, vpc.vpc_id().unwrap())
+        .await?;
     let vpc_id = vpc.vpc_id().unwrap();
     let subnet_id = subnet.subnet_id().unwrap();
 
@@ -77,11 +81,16 @@ async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
     save_private_key(KEY_PAIR_NAME, &private_key)?;
 
     println!("Open Ports 22 & 80...");
-    let public_ip = get_public_ip().await?;
-    let ingress_ip: Ipv4Addr = public_ip.parse().unwrap();
-    ec2.add_ingress_rule_if_not_exists(&security_group.group_id().unwrap(), ingress_ip, 22)
+    let my_cidr = format!("{}/32", get_public_ip().await?);
+    let group_id = security_group.group_id().unwrap();
+    ec2.add_ingress_rule_if_not_exists(group_id, &my_cidr, 22)
         .await?;
-    ec2.add_ingress_rule_if_not_exists(&security_group.group_id().unwrap(), ingress_ip, 80)
+    ec2.add_ingress_rule_if_not_exists(group_id, &my_cidr, 80)
+        .await?;
+
+    println!("Allowing all traffic within the subnet...");
+    let subnet_cidr = "10.0.0.0/16";
+    ec2.add_ingress_rule_if_not_exists(group_id, subnet_cidr, -1)
         .await?;
 
     println!("Creating Instance...");
@@ -98,8 +107,8 @@ async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
         )
         .await?;
     println!("Launched EC2 instance with ID: {}", instance_id);
-    ec2.wait_for_instance_ready(&instance_id, Some(Duration::from_secs(120)))
-        .await?;
+    // ec2.wait_for_instance_ready(&instance_id, Some(Duration::from_secs(120)))
+    //     .await?;
     println!("EC2 Instance is ready!");
     Ok(())
 }

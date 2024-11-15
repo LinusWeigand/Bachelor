@@ -11,11 +11,11 @@ impl EC2Impl {
     pub async fn add_ingress_rule_if_not_exists(
         &self,
         group_id: &str,
-        ingress_ip: Ipv4Addr,
+        cidr_ip: &str,
         port: i32,
     ) -> Result<(), EC2Error> {
         return match self
-            .authorize_security_group_ingress(group_id, vec![ingress_ip], port)
+            .authorize_security_group_ingress(group_id, cidr_ip, port)
             .await
         {
             Ok(_) => Ok(()),
@@ -31,6 +31,39 @@ impl EC2Impl {
             }
         };
     }
+
+    // snippet-start:[ec2.rust.authorize_security_group_ssh_ingress.impl]
+    /// Add an ingress rule to a security group explicitly allowing IPv4 address
+    /// as {ip}/32 over TCP port 22.
+    // Modified
+    pub async fn authorize_security_group_ingress(
+        &self,
+        group_id: &str,
+        cidr_ip: &str,
+        port: i32,
+    ) -> Result<(), EC2Error> {
+        tracing::info!("Authorizing ingress for security group {group_id}");
+        let permission = match port {
+            -1 => IpPermission::builder()
+                .ip_protocol("-1")
+                .ip_ranges(IpRange::builder().cidr_ip(cidr_ip).build())
+                .build(),
+            _ => IpPermission::builder()
+                .ip_protocol("tcp")
+                .from_port(port)
+                .to_port(port)
+                .ip_ranges(IpRange::builder().cidr_ip(cidr_ip).build())
+                .build(),
+        };
+        self.client
+            .authorize_security_group_ingress()
+            .group_id(group_id)
+            .set_ip_permissions(Some(vec![permission]))
+            .send()
+            .await?;
+        Ok(())
+    }
+    // snippet-end:[ec2.rust.authorize_security_group_ssh_ingress.impl]
 
     //Method added
     pub async fn create_security_group_if_not_exists(
@@ -139,39 +172,6 @@ impl EC2Impl {
         }
     }
     // snippet-end:[ec2.rust.describe_security_group.impl]
-
-    // snippet-start:[ec2.rust.authorize_security_group_ssh_ingress.impl]
-    /// Add an ingress rule to a security group explicitly allowing IPv4 address
-    /// as {ip}/32 over TCP port 22.
-    // Modified
-    pub async fn authorize_security_group_ingress(
-        &self,
-        group_id: &str,
-        ingress_ips: Vec<Ipv4Addr>,
-        port: i32,
-    ) -> Result<(), EC2Error> {
-        tracing::info!("Authorizing ingress for security group {group_id}");
-        self.client
-            .authorize_security_group_ingress()
-            .group_id(group_id)
-            .set_ip_permissions(Some(
-                ingress_ips
-                    .into_iter()
-                    .map(|ip| {
-                        IpPermission::builder()
-                            .ip_protocol("tcp")
-                            .from_port(port)
-                            .to_port(port)
-                            .ip_ranges(IpRange::builder().cidr_ip(format!("{ip}/32")).build())
-                            .build()
-                    })
-                    .collect(),
-            ))
-            .send()
-            .await?;
-        Ok(())
-    }
-    // snippet-end:[ec2.rust.authorize_security_group_ssh_ingress.impl]
 
     // snippet-start:[ec2.rust.delete_security_group.impl]
     pub async fn delete_security_group(&self, group_id: &str) -> Result<(), EC2Error> {
