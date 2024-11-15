@@ -35,7 +35,7 @@ struct Args {
     #[arg(short, long, default_value_t = 1)]
     duration: u64,
 
-    #[arg(short, long, default_value_t = 100)]
+    #[arg(short, long, default_value_t = 1)]
     parallel_clients: u128,
 }
 
@@ -44,6 +44,15 @@ async fn main() -> Result<(), Error> {
     let args = Args::parse();
     let client = Arc::new(Client::new());
     let url = Arc::new(format!("http://{}/parquet", args.ip.to_string()));
+
+    let file_path = PathBuf::from(PARQUET_FOLDER).join("test_file.parquet");
+    let mut file: File = File::open(&file_path)
+        .await
+        .with_context(|| format!("Failed opening file at: {:?}", file_path))?;
+    let mut file_contents = Vec::new();
+    file.read_to_end(&mut file_contents)
+        .await
+        .with_context(|| format!("Failed reading file at: {:?}", file_path))?;
 
     let mut client_tasks = Vec::new();
 
@@ -55,9 +64,18 @@ async fn main() -> Result<(), Error> {
         let url_clone = Arc::clone(&url);
         let mode = args.mode;
         let duration = Duration::from_secs(args.duration);
+        let file_contents = file_contents.clone();
 
         let client_task = task::spawn(async move {
-            spawn_client(client_clone, url_clone, cur_offset, mode, duration).await
+            spawn_client(
+                client_clone,
+                url_clone,
+                cur_offset,
+                mode,
+                duration,
+                file_contents,
+            )
+            .await
         });
         client_tasks.push(client_task);
         cur_offset += offset;
@@ -77,6 +95,7 @@ async fn spawn_client(
     file_counter_start: u128,
     mode: Mode,
     duration: Duration,
+    file_contents: Vec<u8>,
 ) {
     let mut file_name_counter = file_counter_start;
     let mut tasks = Vec::new();
@@ -84,7 +103,6 @@ async fn spawn_client(
     let end_time = Instant::now() + duration;
     while Instant::now() < end_time {
         let file_name = format!("test_file{}.parquet", file_name_counter);
-        let file_path = PathBuf::from(PARQUET_FOLDER).join("test_file.parquet");
 
         match mode {
             Mode::Send => spawn_sender(
@@ -92,7 +110,7 @@ async fn spawn_client(
                 Arc::clone(&url),
                 &mut tasks,
                 file_name,
-                file_path,
+                file_contents.clone(),
             ),
             Mode::Receive => {
                 spawn_receiver(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name)
@@ -104,7 +122,7 @@ async fn spawn_client(
                         Arc::clone(&url),
                         &mut tasks,
                         file_name,
-                        file_path,
+                        file_contents.clone(),
                     );
                 } else {
                     spawn_receiver(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name);
@@ -132,10 +150,12 @@ fn spawn_sender(
     url: Arc<String>,
     tasks: &mut Vec<JoinHandle<Result<(), Error>>>,
     file_name: String,
-    file_path: PathBuf,
+    file_contents: Vec<u8>,
 ) {
     let task =
-        task::spawn(async move { send_data_request(&client, &url, &file_name, &file_path).await });
+        task::spawn(
+            async move { send_data_request(&client, &url, &file_name, file_contents).await },
+        );
     tasks.push(task);
 }
 
@@ -153,22 +173,15 @@ async fn send_data_request(
     client: &Client,
     url: &str,
     file_name: &str,
-    file_path: &PathBuf,
+    file_contents: Vec<u8>,
 ) -> Result<()> {
     let url = format!("{}/{}", &url, &file_name);
-    let mut file: File = File::open(file_path)
-        .await
-        .with_context(|| format!("Failed opening file at: {:?}", file_path))?;
-    let mut file_contents = Vec::new();
-    file.read_to_end(&mut file_contents)
-        .await
-        .with_context(|| format!("Failed reading file at: {:?}", file_path))?;
 
     let part = Part::bytes(file_contents).file_name(file_name.to_string());
     let form = Form::new().part("file", part);
-
     let _response = client.put(url).multipart(form).send().await?;
 
+    println!("Got Response to PUT request");
     Ok(())
 }
 
@@ -187,6 +200,6 @@ async fn receive_data_request(client: &Client, url: &str, file_name: &str) -> Re
             response.status()
         ));
     }
-
+    println!("Got Response to GET request");
     Ok(())
 }
