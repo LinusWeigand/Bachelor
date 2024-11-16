@@ -98,75 +98,64 @@ async fn spawn_client(
     file_contents: Vec<u8>,
 ) {
     let mut file_name_counter = file_counter_start;
-    let mut tasks = Vec::new();
 
     let end_time = Instant::now() + duration;
     while Instant::now() < end_time {
         let file_name = format!("test_file{}.parquet", file_name_counter);
-
-        match mode {
+        let task = 
+            match mode {
             Mode::Send => spawn_sender(
                 Arc::clone(&client),
                 Arc::clone(&url),
-                &mut tasks,
                 file_name,
                 file_contents.clone(),
             ),
             Mode::Receive => {
-                spawn_receiver(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name)
+                spawn_receiver(Arc::clone(&client), Arc::clone(&url), file_name)
             }
             Mode::Mixed => {
-                if sample_bernouli_var(MIX_RATIO) {
+                return if sample_bernouli_var(MIX_RATIO) {
                     spawn_sender(
                         Arc::clone(&client),
                         Arc::clone(&url),
-                        &mut tasks,
                         file_name,
                         file_contents.clone(),
                     );
                 } else {
-                    spawn_receiver(Arc::clone(&client), Arc::clone(&url), &mut tasks, file_name);
+                    spawn_receiver(Arc::clone(&client), Arc::clone(&url), file_name);
                 }
             }
-        }
-        file_name_counter += 1;
-        tokio::time::sleep(Duration::from_millis(1)).await;
-    }
-    for task in tasks {
+        };
         if let Err(err) = task.await {
             eprintln!("Error in request: {:?}", err);
         }
+        file_name_counter += 1;
     }
 }
 
 fn sample_bernouli_var(theta: f64) -> bool {
     let mut rng = rand::thread_rng();
     let num: f64 = rng.gen();
-    num < theta
+    num > theta
 }
 
-fn spawn_sender(
+fn spawn_sender (
     client: Arc<Client>,
     url: Arc<String>,
-    tasks: &mut Vec<JoinHandle<Result<(), Error>>>,
     file_name: String,
     file_contents: Vec<u8>,
-) {
-    let task =
-        task::spawn(
-            async move { send_data_request(&client, &url, &file_name, file_contents).await },
-        );
-    tasks.push(task);
+) -> JoinHandle<Result<(), anyhow::Error>> {
+    task::spawn(
+        async move { send_data_request(&client, &url, &file_name, file_contents).await },
+    )
 }
 
 fn spawn_receiver(
     client: Arc<Client>,
     url: Arc<String>,
-    tasks: &mut Vec<JoinHandle<Result<(), Error>>>,
     file_name: String,
-) {
-    let task = task::spawn(async move { receive_data_request(&client, &url, &file_name).await });
-    tasks.push(task);
+) -> JoinHandle<Result<(), anyhow::Error>> {
+    task::spawn(async move { receive_data_request(&client, &url, &file_name).await })
 }
 
 async fn send_data_request(

@@ -4,7 +4,7 @@ use tokio::runtime::Builder;
 mod handlers;
 mod route;
 
-const PARQUET_FOLDER: &str = "./parquet_files/";
+const PARQUET_FOLDER: &str = "/mnt/raid0/";
 
 fn main() {
     let runtime = Builder::new_current_thread().enable_all().build().unwrap();
