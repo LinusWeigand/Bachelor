@@ -4,7 +4,8 @@ use charming::element::{AreaStyle, ItemStyle, Symbol, Trigger};
 use charming::series::Line;
 use charming::{component::Axis, element::Tooltip, Chart};
 
-use super::server_etl::{MetricData, CPU, RAM};
+use super::server_etl::{MetricData};
+use super::utils::{CPU, RAM};
 use super::DURATION;
 
 fn calculate_moving_average(data: &[(f64, f64)], window_size: usize) -> Vec<(f64, f64)> {
@@ -37,11 +38,11 @@ pub fn get_cpu_chart(cpu_data: Vec<Vec<(f64, CPU)>>) -> String {
                     let total_time = active_time + y.idle + y.iowait;
                     let utilization = match total_time {
                         t if t <= 0. => 0.,
-                        _ => active_time / total_time * 100.
+                        _ => active_time / total_time * 100.,
                     };
                     CompositeValue::Array(vec![
-                    CompositeValue::Number(NumericValue::from(x - start_timestamp)),
-                    CompositeValue::Number(NumericValue::from(utilization)),
+                        CompositeValue::Number(NumericValue::from(x - start_timestamp)),
+                        CompositeValue::Number(NumericValue::from(utilization)),
                     ])
                 })
                 .collect()
@@ -58,14 +59,13 @@ pub fn get_cpu_chart(cpu_data: Vec<Vec<(f64, CPU)>>) -> String {
         )
         .y_axis(Axis::new().type_(AxisType::Value).boundary_gap(false))
         .tooltip(Tooltip::new().trigger(Trigger::Axis));
-        
 
     for (i, data) in data_set.iter().enumerate() {
         chart = chart.series(
-                Line::new()
-                    .name(&format!("Core {}", i))
-                    .data(data.clone())
-                    .symbol(Symbol::None),
+            Line::new()
+                .name(&format!("Core {}", i))
+                .data(data.clone())
+                .symbol(Symbol::None),
         );
     }
     let options = serde_json::to_string(&chart).unwrap_or_default();
@@ -116,7 +116,7 @@ pub fn get_metric_chart(metric_data: Vec<(f64, f64)>, max_y: f32) -> String {
             ])
         })
         .collect();
-        let chart = Chart::new()
+    let chart = Chart::new()
         .x_axis(
             Axis::new()
                 .type_(AxisType::Value)
@@ -124,7 +124,13 @@ pub fn get_metric_chart(metric_data: Vec<(f64, f64)>, max_y: f32) -> String {
                 .min(0)
                 .max(DURATION),
         )
-        .y_axis(Axis::new().type_(AxisType::Value).max(max_y).min(0).boundary_gap(false))
+        .y_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .max(max_y)
+                .min(0)
+                .boundary_gap(false),
+        )
         .tooltip(Tooltip::new().trigger(Trigger::Axis))
         .series(
             Line::new()
@@ -144,8 +150,8 @@ pub struct MetricDataJson {
     pub received: String,
 }
 
-pub fn get_instance_metric_data(server_version: u8) -> MetricDataJson {
-    let data = MetricData::new(&format!("v{}", server_version));
+pub fn get_instance_metric_data(server_version: u8, mode: &str) -> MetricDataJson {
+    let data = MetricData::new(&format!("v{}/{}", server_version, mode));
 
     let send = get_metric_chart(data.send, 4.);
     let received = get_metric_chart(data.received, 3000.);

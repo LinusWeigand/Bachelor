@@ -1,5 +1,6 @@
 pub mod server_etl;
 pub mod server_plot;
+pub mod utils;
 
 use axum::{
     response::{Html, IntoResponse},
@@ -11,7 +12,7 @@ use server_plot::MetricDataJson;
 use tokio::main;
 use tower_http::compression::CompressionLayer;
 
-const DURATION: f64 = 359.;
+const DURATION: f64 = 479.;
 
 #[main]
 async fn main() {
@@ -76,13 +77,13 @@ fn generate_chart_set_html(
 }
 
 async fn index() -> impl IntoResponse {
-    let v0 = get_instance_metric_data(0);
+    let v0_send = get_instance_metric_data(0, "test2");
 
     let chart_sets_html = vec![
         generate_chart_set_html(
             "v0: Receive Package into RAM -> write into file",
             "chart1",
-            &v0,
+            &v0_send,
         ),
     ]
     .join("\n");
