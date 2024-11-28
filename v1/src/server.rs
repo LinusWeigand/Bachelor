@@ -1,12 +1,37 @@
 use std::path::Path;
+use perf_event::events::Hardware;
+use perf_event::{Builder, Group};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
+use tokio::sync::mpsc;
 
 const FOLDER: &str = "/mnt/raid0";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+    // Create performance event groups
+    let mut total_group = Group::new()?;
+    let total_cycles = Builder::new()
+        .group(&mut total_group)
+        .kind(Hardware::CPU_CYCLES)
+        .build()?;
+
+    let mut disk_group = Group::new()?;
+    let disk_cycles = Builder::new()
+        .group(&mut disk_group)
+        .kind(Hardware::CPU_CYCLES)
+        .build()?;
+
+    let mut network_group = Group::new()?;
+    let network_cycles = Builder::new()
+        .group(&mut network_group)
+        .kind(Hardware::CPU_CYCLES)
+        .build()?;
+
+
+
     let addr = "0.0.0.0:5201";
     let listener = TcpListener::bind(addr).await?;
     println!("Server listening on {}", addr);
@@ -14,7 +39,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let (mut socket, _) = listener.accept().await?;
 
-        tokio::spawn(async move {
+
+        tokio::spawn(
+
+            async move {
             let mut buffer = vec![0u8; 64 * 1024];
 
             let mut header = vec![0u8; 256];
@@ -48,6 +76,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
 
+            let (tx, mut rx) = mpsc::channel::<Vec<u8>>(100);
+            let writer_task = tokio::spawn(async move {
+                while let Some(data) = rx.recv().await {
+                    if let Err(e) = file.write_all(&data).await {
+                        eprintln!("Failed to write to file: {}", e);
+                        return;
+                    }
+                }
+
+                if let Err(e) = file.sync_all().await {
+                    eprintln!("Failed to sync file: {}", e);
+                }
+            });
+
             let mut received = 0;
             while received < file_size {
                 let n = match socket.read(&mut buffer).await {
@@ -58,19 +100,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         break;
                     }
                 };
-                if n == 0 {
-                    break;
-                }
-                if let Err(e) = file.write_all(&buffer[..n]).await {
-                    eprintln!("Failed to write to file: {}", e);
+
+                if tx.send(buffer[..n].to_vec()).await.is_err() {
+                    eprintln!("Failed to send data to writer task.");
                     return;
                 }
+
                 received += n as u64;
             }
 
-            if let Err(e) = file.sync_all().await {
-                eprintln!("Failed to sync file {:?}: {}", file_path, e);
-                return;
+            drop(tx);
+
+            if let Err(e) = writer_task.await {
+                eprintln!("Writer task failed: {:?}", e);
             }
 
             println!(
