@@ -3,6 +3,7 @@ use clap::{Parser, ValueEnum};
 use rand::Rng;
 use reqwest::multipart::{Form, Part};
 use reqwest::Client;
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,7 +14,6 @@ use tokio::{
     time::Instant,
 };
 
-const PARQUET_FOLDER: &str = "./parquet_files/";
 const MIX_RATIO: f64 = 0.8;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -26,6 +26,9 @@ pub enum Mode {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    #[arg(short, long, default_value_t = String::from("/mnt/raid0/"))]
+    folder: String,
+
     #[arg(short, long)]
     ip: String,
 
@@ -45,7 +48,7 @@ async fn main() -> Result<(), Error> {
     let client = Arc::new(Client::new());
     let url = Arc::new(format!("http://{}/parquet", args.ip.to_string()));
 
-    let file_path = PathBuf::from(PARQUET_FOLDER).join("test_file.parquet");
+    let file_path = PathBuf::from(args.folder).join("test_file.parquet");
     let mut file: File = File::open(&file_path)
         .await
         .with_context(|| format!("Failed opening file at: {:?}", file_path))?;
@@ -59,12 +62,13 @@ async fn main() -> Result<(), Error> {
     let offset: u128 = args.parallel_clients * 1000 * 1000 * args.duration as u128;
     let mut cur_offset: u128 = 0;
 
+    let file_contents = Arc::new(file_contents);
     for _ in 0..args.parallel_clients {
         let client_clone = Arc::clone(&client);
         let url_clone = Arc::clone(&url);
         let mode = args.mode;
         let duration = Duration::from_secs(args.duration);
-        let file_contents = file_contents.clone();
+        let file_contents = Arc::clone(&file_contents);
 
         let client_task = task::spawn(async move {
             spawn_client(
@@ -95,31 +99,28 @@ async fn spawn_client(
     file_counter_start: u128,
     mode: Mode,
     duration: Duration,
-    file_contents: Vec<u8>,
+    file_contents: Arc<Vec<u8>>,
 ) {
     let mut file_name_counter = file_counter_start;
 
     let end_time = Instant::now() + duration;
     while Instant::now() < end_time {
         let file_name = format!("test_file{}.parquet", file_name_counter);
-        let task = 
-            match mode {
+        let task = match mode {
             Mode::Send => spawn_sender(
                 Arc::clone(&client),
                 Arc::clone(&url),
                 file_name,
-                file_contents.clone(),
+                Arc::clone(&file_contents),
             ),
-            Mode::Receive => {
-                spawn_receiver(Arc::clone(&client), Arc::clone(&url), file_name)
-            }
+            Mode::Receive => spawn_receiver(Arc::clone(&client), Arc::clone(&url), file_name),
             Mode::Mixed => {
                 return if sample_bernouli_var(MIX_RATIO) {
                     spawn_sender(
                         Arc::clone(&client),
                         Arc::clone(&url),
                         file_name,
-                        file_contents.clone(),
+                        Arc::clone(&file_contents),
                     );
                 } else {
                     spawn_receiver(Arc::clone(&client), Arc::clone(&url), file_name);
@@ -139,15 +140,13 @@ fn sample_bernouli_var(theta: f64) -> bool {
     num > theta
 }
 
-fn spawn_sender (
+fn spawn_sender(
     client: Arc<Client>,
     url: Arc<String>,
     file_name: String,
-    file_contents: Vec<u8>,
+    file_contents: Arc<Vec<u8>>,
 ) -> JoinHandle<Result<(), anyhow::Error>> {
-    task::spawn(
-        async move { send_data_request(&client, &url, &file_name, file_contents).await },
-    )
+    task::spawn(async move { send_data_request(&client, &url, &file_name, file_contents).await })
 }
 
 fn spawn_receiver(
@@ -162,15 +161,19 @@ async fn send_data_request(
     client: &Client,
     url: &str,
     file_name: &str,
-    file_contents: Vec<u8>,
+    file_contents: Arc<Vec<u8>>,
 ) -> Result<()> {
     let url = format!("{}/{}", &url, &file_name);
 
-    let part = Part::bytes(file_contents).file_name(file_name.to_string());
+    let static_slice: &'static [u8] = unsafe {
+        let ptr = Arc::as_ptr(&file_contents);
+        &*ptr
+    };
+    let part = Part::bytes(Cow::Borrowed(static_slice)).file_name(file_name.to_string());
     let form = Form::new().part("file", part);
+
     let _response = client.put(url).multipart(form).send().await?;
 
-    println!("Got Response to PUT request");
     Ok(())
 }
 
@@ -189,6 +192,5 @@ async fn receive_data_request(client: &Client, url: &str, file_name: &str) -> Re
             response.status()
         ));
     }
-    println!("Got Response to GET request");
     Ok(())
 }
