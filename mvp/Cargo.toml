@@ -5,16 +5,18 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = { version = "0.7.7", features = ["multipart"] }
-tokio = { version = "1.40.0", features = ["full"] }
-serde_json = "1.0.128"
 parquet = "53.1.0"
-tokio-util = { version = "0.7.12", features = ["io"] }
 reqwest = { version = "0.12.9", features = ["json", "multipart", "rustls-tls"], default-features = false }
 dotenv = "0.15.0"
 clap = { version = "4.5.20", features = ["derive"] }
 rand = "0.8.5"
 anyhow = "1.0.93"
+
+actix-web = "4.9.0"
+futures = "0.3.31"
+serde_json = "1.0.133"
+tokio = { version = "1.41.1", features = ["full"] }
+tokio-util = "0.7.12"
 
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
