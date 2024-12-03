@@ -1,108 +1,82 @@
-use std::path::PathBuf;
-
-use axum::{
-    body::Body,
-    extract::{Multipart, Path},
-    http::{header, Response, StatusCode},
-    response::IntoResponse,
-    Json,
-};
+use actix_web::{error::ErrorInternalServerError, web, Error, HttpResponse, Responder};
+use futures::StreamExt;
 use serde_json::json;
-use tokio::{
-    fs::{create_dir_all, File},
-    io::AsyncWriteExt,
-};
-use tokio_util::io::ReaderStream;
+use std::path::PathBuf;
+use tokio::fs::{create_dir_all, File};
+use tokio::io::AsyncWriteExt;
 
-use crate::PARQUET_FOLDER;
+use crate::{MAX_CHUNK_SIZE, PARQUET_FOLDER};
 
-pub async fn health_checker_handler() -> impl IntoResponse {
+pub async fn health_checker_handler() -> impl Responder {
     let response = json!({
         "status": "success",
         "message": "API is running"
     });
-    Json(response)
+    HttpResponse::Ok().json(response)
 }
 
-pub async fn get_parquet_file(
-    Path(file_name): Path<String>,
-) -> Result<impl IntoResponse, StatusCode> {
-    let file_path = PathBuf::from(PARQUET_FOLDER).join(&*file_name);
+pub async fn get_parquet_file(path: web::Path<String>) -> Result<HttpResponse, Error> {
+    let file_name = path.into_inner();
+    let file_path = PathBuf::from(PARQUET_FOLDER).join(&file_name);
 
-    match file_path.try_exists() {
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-        Ok(false) => return Err(StatusCode::NOT_FOUND),
-        Ok(true) => {}
-    };
+    if !file_path.exists() {
+        return Ok(HttpResponse::NotFound().finish());
+    }
 
-    let file = match File::open(&file_path).await {
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-        Ok(f) => f,
-    };
+    let file = File::open(&file_path)
+        .await
+        .map_err(ErrorInternalServerError)?;
+    let file_stream = tokio_util::io::ReaderStream::new(file);
 
-    let stream = ReaderStream::new(file);
-    let body = Body::from_stream(stream);
-
-    return match Response::builder()
-        .header(header::CONTENT_TYPE, "application/octet-stream")
-        .body(body)
-    {
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-        Ok(r) => Ok(r),
-    };
+    Ok(HttpResponse::Ok()
+        .content_type("application/octet-stream")
+        .streaming(file_stream))
 }
 
 pub async fn put_parquet_file(
-    Path(file_name): Path<String>,
-    mut multipart: Multipart,
-) -> Result<impl IntoResponse, StatusCode> {
-    if create_dir_all(PARQUET_FOLDER).await.is_err() {
-        eprintln!("Failed to create directory: {}", PARQUET_FOLDER);
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
+    path: web::Path<String>,
+    mut payload: web::Payload,
+) -> Result<HttpResponse, Error> {
+    // let file_name = path.into_inner();
 
-    let full_path = PathBuf::from(PARQUET_FOLDER).join(&file_name);
+    // create_dir_all(PARQUET_FOLDER)
+    //     .await
+    //     .map_err(|e| ErrorInternalServerError(format!("Failed to create directory: {e}")))?;
 
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| {
-            eprintln!("Failed to read next multipart field: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-    {
-        if let Some(_file_name_in_field) = field.file_name() {
+    // let full_path = PathBuf::from(PARQUET_FOLDER).join(&file_name);
 
-            let mut file = tokio::fs::File::create(&full_path).await.map_err(|e| {
-                eprintln!("Failed to create file {}: {e}", full_path.display());
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+    // let mut file = File::create(&full_path)
+    //     .await
+    //     .map_err(|e| ErrorInternalServerError(format!("Failed to create file: {e}")))?;
 
-            let mut field_data = field;
+    let mut buffer = Vec::new();
 
-            while let Some(chunk) = field_data
-                .chunk()
-                .await
-                .map_err(|e| {
-                    eprintln!("Failed to read field chunk: {e}");
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })? 
-            {
-                if let Err(e) = file.write_all(&chunk).await {
-                    eprintln!("Failed to write chunk to file {}: {e}", full_path.display());
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                }
+    while let Some(chunk) = payload.next().await {
+        let data =
+            chunk.map_err(|e| ErrorInternalServerError(format!("Failed to read chunk: {e}")))?;
+
+        buffer.extend_from_slice(&data);
+
+        while buffer.len() >= MAX_CHUNK_SIZE {
+            let chunk_to_write = buffer.drain(..MAX_CHUNK_SIZE).collect::<Vec<_>>();
+
+            if let Some(x) = chunk_to_write.first() {
+                println!("{},{}", x, path);
             }
-
-            file.flush().await.map_err(|e| {
-                eprintln!("Failed to flush file {}: {e}", full_path.display());
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-            return Ok(StatusCode::OK);
-        } else {
-            eprintln!("Multipart field is missing a file name");
-            return Err(StatusCode::BAD_REQUEST);
-        };
+            // file.write_all(&chunk_to_write)
+            //     .await
+            //     .map_err(|e| ErrorInternalServerError(format!("Failed to write chunk: {e}")))?;
+        }
     }
-    Err(StatusCode::BAD_REQUEST)
+    if !buffer.is_empty() {
+        // file.write_all(&buffer)
+        //     .await
+        //     .map_err(|e| ErrorInternalServerError(format!("Failed to write final chunk: {e}")))?;
+    }
+
+    // file.flush()
+    //     .await
+    //     .map_err(|e| ErrorInternalServerError(format!("Failed to flush file: {e}")))?;
+
+    Ok(HttpResponse::Ok().finish())
 }
