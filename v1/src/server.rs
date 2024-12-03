@@ -4,8 +4,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use perf_event::{Builder, Group};
-use perf_event::events::Hardware;
-use std::time::Instant;
+use perf_event::events::{Hardware, Software};
 
 const FOLDER: &str = "/mnt/raid0";
 
@@ -27,33 +26,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut total_group = Group::new().unwrap();
                 let total_cycles = Builder::new()
                     .group(&mut total_group)
-                    .kind(Hardware::CPU_CYCLES)
+                    .kind(Software::CPU_CLOCK)
                     .build().unwrap();
 
                 let mut create_file_group = Group::new().unwrap();
                 let create_file_cycles = Builder::new()
                     .group(&mut create_file_group)
-                    .kind(Hardware::CPU_CYCLES)
+                    .kind(Software::CPU_CLOCK)
                     .build().unwrap();
 
                 let mut write_file_group = Group::new().unwrap();
                 let write_file_cycles = Builder::new()
                     .group(&mut write_file_group)
-                    .kind(Hardware::CPU_CYCLES)
+                    .kind(Software::CPU_CLOCK)
                     .build().unwrap();
 
                 let mut sync_file_group = Group::new().unwrap();
                 let sync_file_cycles = Builder::new()
                     .group(&mut sync_file_group)
-                    .kind(Hardware::CPU_CYCLES)
+                    .kind(Software::CPU_CLOCK)
                     .build().unwrap();
 
                 let mut network_group = Group::new().unwrap();
                 let network_cycles = Builder::new()
                     .group(&mut network_group)
-                    .kind(Hardware::CPU_CYCLES)
+                    .kind(Software::CPU_CLOCK)
                     .build().unwrap();
-                let mut buffer = vec![0u8; 64 * 1024];
+                let mut buffer = vec![0u8; 64 * 1024 * 1024];
 
                 let mut header = vec![0u8; 256];
                 total_group.enable().unwrap(); // Start measuring total CPU cycles
@@ -112,11 +111,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         write_file_group.disable().unwrap();
                     }
 
+
                     sync_file_group.enable().unwrap(); // Measure file sync cycles
                     if let Err(e) = file.sync_all().await {
                         eprintln!("Failed to sync file: {}", e);
                     }
                     sync_file_group.disable().unwrap();
+
+
+
+                    let write_file_counts = write_file_group.read().unwrap();
+                    let sync_file_counts = sync_file_group.read().unwrap();
+
+                    println!("Write File I/O CPU cycles: {}", write_file_counts[&write_file_cycles]);
+                    println!("Sync File I/O CPU cycles: {}", sync_file_counts[&sync_file_cycles]);
                 });
 
                 let mut received = 0;
@@ -150,8 +158,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let total_counts = total_group.read().unwrap();
                 let create_file_counts = create_file_group.read().unwrap();
-                let write_file_counts = write_file_group.read().unwrap();
-                let sync_file_counts = sync_file_group.read().unwrap();
                 let network_counts = network_group.read().unwrap();
 
                 println!(
@@ -160,8 +166,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
                 println!("Total CPU cycles: {}", total_counts[&total_cycles]);
                 println!("Create File I/O CPU cycles: {}", create_file_counts[&create_file_cycles]);
-                println!("Write File I/O CPU cycles: {}", write_file_counts[&write_file_cycles]);
-                println!("Sync File I/O CPU cycles: {}", sync_file_counts[&sync_file_cycles]);
                 println!("Network I/O CPU cycles: {}", network_counts[&network_cycles]);
             }
         });

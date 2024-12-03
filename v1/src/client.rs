@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let task = tokio::spawn(async move {
             let mut stream = TcpStream::connect(server_ip).await.unwrap();
             let mut header = format!("{}|{}\n", file_name, file_size).into_bytes();
-            
+
             // Pad header to 256 bytes
             if header.len() < 256 {
                 header.resize(256, 0);
