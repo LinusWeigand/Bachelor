@@ -4,9 +4,15 @@ data_analysis/Cargo.lock
 data_analysis/**/doc/
 data_analysis/**/.rust-analyzer
 data_analysis/*.out
+data_analysis/data/*
 
 data_analysis/snowset-main.parquet/
 data_analysis/snowset-main.parquet
+
+v1/target/
+v1/target
+
+diskio/target/
 
 sdk/target/
 sdk/target
