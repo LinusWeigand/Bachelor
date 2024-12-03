@@ -1,11 +1,8 @@
-use charming::component::FilterMode;
 use charming::datatype::{CompositeValue, NumericValue};
-use charming::df;
+use charming::element::AxisType;
 use charming::element::{AreaStyle, ItemStyle, Symbol, Trigger};
 use charming::series::Line;
-use charming::{component::Axis, element::Tooltip, series::Scatter, Chart};
-use charming::{component::DataZoom, datatype::DataPointItem, element::Formatter};
-use charming::{element::AxisType, series::Bar};
+use charming::{component::Axis, element::Tooltip, Chart};
 
 use super::fio_etl::MetricData;
 
@@ -100,7 +97,6 @@ pub fn get_instance_metric_data(
         TestType::SequentialWrite => "seq_write",
         TestType::RealWorld => "real_world",
     };
-    let instance = "d3en.xlarge";
     let data = MetricData::new(&format!(
         "{}/RAID{}/{}",
         instance, raid_level, test_type_str

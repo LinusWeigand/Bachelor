@@ -1,5 +1,7 @@
 use std::{
-    env::current_dir, error::Error, fmt::format, fs::File, io::{self, BufRead}
+    error::Error,
+    fs::File,
+    io::{self, BufRead},
 };
 
 fn read_log_file(file_path: &str, data_type: DataType) -> Result<Vec<(f64, f64)>, Box<dyn Error>> {
@@ -42,31 +44,19 @@ pub struct MetricData {
 
 impl MetricData {
     pub fn new(file_path: &str) -> MetricData {
-        println!(
-            "File Path: {}",
-            &format!("./data/{}/bw.log", file_path)
-        );
+        println!("File Path: {}", &format!("./data/{}/bw.log", file_path));
 
         let bw = read_log_file(
             &format!("./data/{}/bw.log", file_path),
             DataType::Throughput,
         )
         .unwrap();
-        let iops = read_log_file(
-            &format!("./data/{}/iops.log", file_path),
-            DataType::IOPS,
-        )
-        .unwrap();
-        let lat = read_log_file(
-            &format!("./data/{}/lat.log", file_path),
-            DataType::Latency,
-        )
-        .unwrap();
-        let clat = read_log_file(
-            &format!("./data/{}/clat.log", file_path),
-            DataType::Latency,
-        )
-        .unwrap();
+        let iops =
+            read_log_file(&format!("./data/{}/iops.log", file_path), DataType::IOPS).unwrap();
+        let lat =
+            read_log_file(&format!("./data/{}/lat.log", file_path), DataType::Latency).unwrap();
+        let clat =
+            read_log_file(&format!("./data/{}/clat.log", file_path), DataType::Latency).unwrap();
 
         MetricData {
             bw,
