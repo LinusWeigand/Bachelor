@@ -1,11 +1,10 @@
 use charming::datatype::{CompositeValue, NumericValue};
-use charming::element::AxisType;
-use charming::element::{AreaStyle, ItemStyle, Symbol, Trigger};
+use charming::element::{AreaStyle, Symbol, Trigger};
+use charming::element::{AxisType, Color, ItemStyle};
 use charming::series::Line;
 use charming::{component::Axis, element::Tooltip, Chart};
 
-use super::server_etl::{MetricData};
-use super::utils::{CPU, RAM};
+use super::server_etl::MetricData;
 use super::DURATION;
 
 fn calculate_moving_average(data: &[(f64, f64)], window_size: usize) -> Vec<(f64, f64)> {
@@ -25,24 +24,16 @@ fn calculate_moving_average(data: &[(f64, f64)], window_size: usize) -> Vec<(f64
     moving_average
 }
 
-pub fn get_cpu_chart(cpu_data: Vec<Vec<(f64, CPU)>>) -> String {
-    let start_timestamp = cpu_data[0][0].0;
+pub fn get_cpu_chart(cpu_data: &Vec<Vec<(f64, f64)>>) -> String {
     let data_set: Vec<Vec<CompositeValue>> = cpu_data
-        .clone()
-        .into_iter()
+        .iter()
         .map(|inner_vec| {
             inner_vec
-                .into_iter()
+                .iter()
                 .map(|(x, y)| {
-                    let active_time = y.user + y.system + y.nice + y.softirq + y.irq;
-                    let total_time = active_time + y.idle + y.iowait;
-                    let utilization = match total_time {
-                        t if t <= 0. => 0.,
-                        _ => active_time / total_time * 100.,
-                    };
                     CompositeValue::Array(vec![
-                        CompositeValue::Number(NumericValue::from(x - start_timestamp)),
-                        CompositeValue::Number(NumericValue::from(utilization)),
+                        CompositeValue::Number(NumericValue::from(*x)),
+                        CompositeValue::Number(NumericValue::from(*y)),
                     ])
                 })
                 .collect()
@@ -72,51 +63,32 @@ pub fn get_cpu_chart(cpu_data: Vec<Vec<(f64, CPU)>>) -> String {
     options
 }
 
-pub fn get_ram_chart(ram_data: Vec<(f64, RAM)>) -> String {
-    let start_timestamp = ram_data[0].0;
-    let data_set: Vec<CompositeValue> = ram_data
-        .clone()
-        .into_iter()
+pub fn get_chart(
+    data: &Vec<(f64, f64)>,
+    name: &str,
+    max_y: Option<f32>,
+    moving_average: bool,
+) -> String {
+    let data_set: Vec<CompositeValue> = data
+        .iter()
         .map(|(x, y)| {
             CompositeValue::Array(vec![
-                CompositeValue::Number(NumericValue::from(x - start_timestamp)),
-                CompositeValue::Number(NumericValue::from(y.total - y.available)),
+                CompositeValue::Number(NumericValue::from(*x)),
+                CompositeValue::Number(NumericValue::from(*y)),
             ])
         })
         .collect();
-    let chart = Chart::new()
-        .x_axis(
-            Axis::new()
-                .type_(AxisType::Value)
-                .boundary_gap(false)
-                .min(0)
-                .max(DURATION),
-        )
-        .y_axis(Axis::new().type_(AxisType::Value).boundary_gap(false))
-        .tooltip(Tooltip::new().trigger(Trigger::Axis))
-        .series(
-            Line::new()
-                .name("Original")
-                .area_style(AreaStyle::new())
-                .data(data_set)
-                .symbol(Symbol::None),
-        );
-    let options = serde_json::to_string(&chart).unwrap_or_default();
-    options
-}
 
-pub fn get_metric_chart(metric_data: Vec<(f64, f64)>, max_y: f32) -> String {
-    let data_set: Vec<CompositeValue> = metric_data
-        .clone()
-        .into_iter()
-        .map(|(x, y)| {
-            CompositeValue::Array(vec![
-                CompositeValue::Number(NumericValue::from(x)),
-                CompositeValue::Number(NumericValue::from(y)),
-            ])
-        })
-        .collect();
-    let chart = Chart::new()
+    let mut y_axis = Axis::new()
+        .type_(AxisType::Value)
+        .min(0)
+        .boundary_gap(false);
+
+    if let Some(max_y) = max_y {
+        y_axis = y_axis.max(max_y);
+    }
+
+    let mut chart = Chart::new()
         .x_axis(
             Axis::new()
                 .type_(AxisType::Value)
@@ -124,23 +96,38 @@ pub fn get_metric_chart(metric_data: Vec<(f64, f64)>, max_y: f32) -> String {
                 .min(0)
                 .max(DURATION),
         )
-        .y_axis(
-            Axis::new()
-                .type_(AxisType::Value)
-                .max(max_y)
-                .min(0)
-                .boundary_gap(false),
-        )
+        .y_axis(y_axis)
         .tooltip(Tooltip::new().trigger(Trigger::Axis))
         .series(
             Line::new()
-                .name("Original")
-                .area_style(AreaStyle::new())
+                .name(name)
                 .data(data_set)
-                .symbol(Symbol::None),
+                .symbol(Symbol::None)
+                .area_style(AreaStyle::new()),
         );
-    let options = serde_json::to_string(&chart).unwrap_or_default();
-    options
+
+    let mut moving_average_set: Vec<CompositeValue> = Vec::new();
+    if moving_average {
+        moving_average_set = calculate_moving_average(data, 200)
+            .iter()
+            .map(|(x, y)| {
+                CompositeValue::Array(vec![
+                    CompositeValue::Number(NumericValue::from(*x)),
+                    CompositeValue::Number(NumericValue::from(*y)),
+                ])
+            })
+            .collect();
+        chart = chart.series(
+            Line::new()
+                .name("Moving Average")
+                .data(moving_average_set)
+                .symbol(Symbol::None)
+                .item_style(ItemStyle::new().color("#FF0000"))
+                .smooth(true),
+        )
+    }
+
+    serde_json::to_string(&chart).unwrap()
 }
 
 pub struct MetricDataJson {
@@ -148,19 +135,32 @@ pub struct MetricDataJson {
     pub ram: String,
     pub send: String,
     pub received: String,
+    pub net_io: String,
+    pub send_io: String,
+    pub receive_io: String,
+    pub disk_io: String,
 }
 
 pub fn get_instance_metric_data(server_version: u8, mode: &str) -> MetricDataJson {
     let data = MetricData::new(&format!("v{}/{}", server_version, mode));
 
-    let send = get_metric_chart(data.send, 4.);
-    let received = get_metric_chart(data.received, 3000.);
-    let cpu = get_cpu_chart(data.cpu);
-    let ram = get_ram_chart(data.ram);
+    let cpu = get_cpu_chart(&data.cpu_util);
+    let ram = get_chart(&data.ram, "GB", None, false);
+    let send = get_chart(&data.send, "GB/s", Some(3.1), true);
+    let received = get_chart(&data.received, "GB/s", Some(0.01), true);
+    let disk_io = get_chart(&data.disk_io, "Percentage", None, false);
+    let net_io = get_chart(&data.net_io, "Percentage", None, false);
+    let send_io = get_chart(&data.send_io, "Percentage", None, false);
+    let receive_io = get_chart(&data.receive_io, "Percentage", None, false);
+    // println!("{}", disk_io);
     MetricDataJson {
         cpu,
         ram,
         send,
         received,
+        net_io,
+        send_io,
+        receive_io,
+        disk_io,
     }
 }
