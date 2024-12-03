@@ -22,11 +22,11 @@ path = "src/fio/mod.rs"
 name = "vantage"
 path = "src/vantage/mod.rs"
 
-
 [[bin]]
 name = "snowset"
 path = "src/snowset/mod.rs"
 
 [[bin]]
-name = "plot_old"
-path = "src/plot_old.rs"
+name = "server"
+path = "src/server/mod.rs"
+
