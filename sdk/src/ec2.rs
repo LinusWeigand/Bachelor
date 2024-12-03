@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // This code is modified
 
+use crate::utils::{EC2Error, EC2Impl};
+use crate::IS_SPOT_INSTANCE;
+use aws_sdk_ec2::client::Waiters;
 use aws_sdk_ec2::types::{
-    Filter, IamInstanceProfileSpecification, Instance, InstanceMarketOptionsRequest, InstanceStateName, InstanceType, KeyPairInfo, MarketType, SecurityGroup, Tag
+    Filter, IamInstanceProfileSpecification, Instance, InstanceMarketOptionsRequest,
+    InstanceStateName, InstanceType, KeyPairInfo, MarketType, SecurityGroup, Tag,
 };
 use aws_smithy_runtime_api::client::waiters::error::WaiterError;
-use aws_sdk_ec2::client::Waiters;
 use std::time::Duration;
-use crate::utils::{EC2Error, EC2Impl};
 
 impl EC2Impl {
     // snippet-start:[ec2.rust.create_instance.impl]
@@ -23,9 +25,15 @@ impl EC2Impl {
         subnet_id: &str,
         iam_instance_profile: Option<&str>,
     ) -> Result<String, EC2Error> {
-        let instance_market_options = InstanceMarketOptionsRequest::builder()
-            .market_type(MarketType::Spot)
-            .build();
+        let mut instance_market_options = InstanceMarketOptionsRequest::builder();
+
+        if IS_SPOT_INSTANCE {
+            instance_market_options = instance_market_options
+                .market_type(MarketType::Spot);
+        }
+
+        let instance_market_options = instance_market_options.build();
+
         let mut run_instances_builder = self
             .client
             .run_instances()
@@ -129,7 +137,7 @@ impl EC2Impl {
         Ok(instance.clone())
     }
     // snippet-end:[ec2.rust.describe_instance.impl]
-    
+
     //Method added
     pub async fn get_instance_id_by_name_if_running(
         &self,

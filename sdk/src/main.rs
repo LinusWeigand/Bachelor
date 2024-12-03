@@ -11,7 +11,7 @@ use aws_sdk_ec2::{types::InstanceType, Client as EC2Client};
 use ip::get_public_ip;
 use keypair::{create_key_pair, save_private_key};
 use ssm::get_latest_ami_id;
-use std::{error::Error, net::Ipv4Addr, time::Duration};
+use std::{error::Error, time::Duration};
 use utils::{setup_connection, EC2Impl};
 use vpc::{
     add_igw_route_if_not_exists, attach_internet_gateway_if_not_exists, enable_auto_assign_ip,
@@ -22,8 +22,9 @@ pub enum Arch {
     X86_64,
 }
 
-const INSTANCE_NAME: &str = "mvp-client";
-const KEY_PAIR_NAME: &str = "mvp-key-pair-client";
+const INSTANCE_NAME: &str = "mvp-server";
+const KEY_PAIR_NAME: &str = "mvp-key-pair-server";
+const IS_SPOT_INSTANCE: bool = true;
 
 // Depends on Instance (d3en is x86_64)
 const ARCH: Arch = Arch::X86_64;
@@ -42,9 +43,8 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let ec2_client = EC2Client::new(&config);
     let ec2 = EC2Impl::new(ec2_client);
 
-
     run(&ec2).await?;
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    tokio::time::sleep(Duration::from_secs(15)).await;
     setup_connection(&ec2, INSTANCE_NAME).await?;
     Ok(())
 }
@@ -109,6 +109,5 @@ async fn run(ec2: &EC2Impl) -> Result<(), Box<dyn Error>> {
     println!("Launched EC2 instance with ID: {}", instance_id);
     // ec2.wait_for_instance_ready(&instance_id, Some(Duration::from_secs(120)))
     //     .await?;
-    println!("EC2 Instance is ready!");
     Ok(())
 }

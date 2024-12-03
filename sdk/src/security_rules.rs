@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // This code is modified
 
-use aws_sdk_ec2::types::{Filter, IpPermission, IpRange, SecurityGroup};
-use std::net::Ipv4Addr;
-
 use crate::{utils::EC2Error, utils::EC2Impl};
+use aws_sdk_ec2::types::{Filter, IpPermission, IpRange, SecurityGroup};
 
 impl EC2Impl {
     pub async fn add_ingress_rule_if_not_exists(
