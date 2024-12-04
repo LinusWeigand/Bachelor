@@ -1,4 +1,3 @@
-use std::alloc;
 use std::sync::Arc;
 use rand::{thread_rng, Rng};
 use tokio::fs::OpenOptions;
@@ -19,7 +18,6 @@ async fn main() -> std::io::Result<()> {
             let total_bytes_written = Arc::clone(&total_bytes_written);
             let filename = filename.to_string();
             tokio::spawn(async move {
-                let buffer = create_random_buffer(block_size);
 
                 let mut file = OpenOptions::new()
                     .write(true)
@@ -33,6 +31,8 @@ async fn main() -> std::io::Result<()> {
                 let mut offset = i as u64 * block_size as u64; 
 
                 while start_time.elapsed().as_secs() < runtime_secs {
+                    let buffer = create_random_buffer(block_size);
+
                     file.seek(SeekFrom::Start(offset))
                         .await
                         .expect("Seek failed");
