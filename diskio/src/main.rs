@@ -1,10 +1,10 @@
+use clap::Parser;
+use rand::{thread_rng, Rng};
 use std::sync::Arc;
 use std::time::Instant;
-use rand::{thread_rng, Rng};
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, SeekFrom};
 use tokio::sync::Mutex;
-use clap::Parser;
 
 const FILE_PATH: &str = "/mnt/raid0/testfile";
 const BLOCK_SIZE: u64 = 256 * 1024 * 1024;
@@ -30,7 +30,7 @@ struct Args {
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
     let total_bytes_written = Arc::new(Mutex::new(0u64));
-    let (tx, rx) = async_channel::bounded::<DataChunk>(CHANNEL_BUFFER_SIZE);
+    let (tx, rx) = async_channel::bounded::<Arc<DataChunk>>(CHANNEL_BUFFER_SIZE);
 
     let write_tasks: Vec<_> = (0..args.write)
         .map(|i| {
@@ -49,7 +49,6 @@ async fn main() -> std::io::Result<()> {
                 let mut bytes_written = 0u64;
 
                 while start_time.elapsed().as_secs() < RUNTIME_SECS {
-
                     if let Ok(data_chunk) = rx.recv().await {
                         file.seek(SeekFrom::Start(data_chunk.offset))
                             .await
@@ -64,13 +63,15 @@ async fn main() -> std::io::Result<()> {
 
                 let mut total = total_bytes_written.lock().await;
                 *total += bytes_written as u64;
-                println!("Task {}: Bytes: {}, MiB/s: {}", 
-                    i, bytes_written, (bytes_written / (1024 * 1024) / start_time.elapsed().as_secs()));
+                println!(
+                    "Task {}: Bytes: {}, MiB/s: {}",
+                    i,
+                    bytes_written,
+                    (bytes_written / (1024 * 1024) / start_time.elapsed().as_secs())
+                );
             })
         })
         .collect();
-
-
 
     let send_tasks: Vec<_> = (0..args.send)
         .map(|i| {
@@ -83,12 +84,9 @@ async fn main() -> std::io::Result<()> {
                 while start_time.elapsed().as_secs() < RUNTIME_SECS {
                     let data = create_random_buffer(CHANNEL_BUFFER_SIZE);
 
-                    let data_chunk = DataChunk {
-                        offset,
-                        data,
-                    };
-                    
-                    if tx.send(data_chunk).await.is_err() {
+                    let data_chunk = Arc::new(DataChunk { offset, data });
+
+                    if tx.send(Arc::clone(&data_chunk)).await.is_err() {
                         eprintln!("Failed to put data_chunk into channel");
                         return;
                     }
@@ -98,11 +96,9 @@ async fn main() -> std::io::Result<()> {
         })
         .collect();
 
-
-
     futures::future::join_all(send_tasks).await;
-    
-    drop(tx); 
+
+    drop(tx);
     futures::future::join_all(write_tasks).await;
 
     let elapsed = RUNTIME_SECS as f64;
