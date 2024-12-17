@@ -12,7 +12,7 @@ use server_plot::MetricDataJson;
 use tokio::main;
 use tower_http::compression::CompressionLayer;
 
-const DURATION: f64 = 79.;
+const DURATION: f64 = 239.;
 const CORE_COUNT: usize = 16;
 
 #[main]
@@ -117,7 +117,7 @@ async fn index() -> impl IntoResponse {
     // let curl_32G = get_instance_metric_data(2, "curl_32G");
     // let gimp_100 = get_instance_metric_data(2, "gimp_100");
     // let iperf3 = get_instance_metric_data(3, "own");
-    let own = get_instance_metric_data(8, "send2");
+    let own = get_instance_metric_data(96, "send4");
 
     let chart_sets_html = vec![
         // generate_chart_set_html(

@@ -13,6 +13,8 @@ axum = "0.7.7"
 tokio = { version = "1.41.0", features = ["full"] }
 serde_json = "1.0.132"
 tower-http = { version = "0.6.1", features = ["compression-gzip", "compression-br", "compression-deflate"] }
+google-cloud-storage = "0.23.0"
+
 
 [[bin]]
 name = "fio"
@@ -30,3 +32,10 @@ path = "src/snowset/mod.rs"
 name = "server"
 path = "src/server/mod.rs"
 
+[[bin]]
+name = "thesios"
+path = "src/thesios/iteration.rs"
+
+[[bin]]
+name = "plot_thesios"
+path = "src/thesios/plot.rs"
