@@ -1,0 +1,20 @@
+Given will be the SQL table schemas that might be used in the queries. Also the EXPLAIN ANALYSE output will be given for each query.
+Your job is it to find out how many rows and cols are there in total:
+The total column count can be derived from the amount of elements in the used schema, if multiple schemas are used for example in a join, then the total column count will be the resulting schema.
+The total row count can be derived from the EXPLAIN ANALYSE output, usually at the very bottom were it first scans the whole table. again if multiple tables get used, you have to find out the total amount of rows.
+
+Also your job is it to find out how many rows and cols are used in the calculations of the result.
+I don't mean the rows and cols in the result!
+I mean how many rows and cols are used to calculate the final output. So how many rows and cols were min needed to compute the final output.
+For example when aggregating data with count, sum, avg, the amount of rows and cols that were used in the calculations is much larger than the amount in the actual result.
+
+The used columns can be derived from the query's sql code.
+The used rows can be derived from the EXPLAIN ANALYSE output.
+
+The table name can be derived from the query's sql code.
+
+Your output will be structured. You will not provide any extra information. Your only output will be the structured json with keys:
+
+table_name, total_rows, used_rows, total_cols, used_cols
+
+Don't do a ```json around the response!
