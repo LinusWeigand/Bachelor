@@ -23,10 +23,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut database_names: Vec<String> = Vec::new();
     let current_dir = PathBuf::from(REPO);
 
+
+    let index = tokio::fs::read_to_string("index.txt").await?;
+    let index = index.trim().parse::<u32>().unwrap();
     let mut counter = 0;
     for entry in fs::read_dir(&current_dir)? {
         counter += 1;
-        if counter != 7 {
+        if counter != index {
             continue;
         }
         let entry = entry?;
@@ -49,17 +52,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             let request_url = format!("{}/{}", url, compressed_file_name);
 
-            println!("request_url: {}", request_url);
             let response = reqwest::get(&request_url).await?;
-            println!("Got response");
 
             if response.status() != StatusCode::OK {
-                println!("File not found or invalid URL: {}", &request_url);
+                println!("All Files downloaded.");
                 break;
             }
 
             // Stream to File
-            println!("Trying to find file...");
+            println!("Streaming to file...");
             let compressed_filepath = path.clone().join(compressed_file_name);
             let mut compressed_file = File::create(&compressed_filepath).await?;
 
@@ -81,7 +82,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let mut decoder = BzDecoder::new(reader);
             let mut buffer = [0u8; 8192];
 
-            println!("Decoding file");
+            println!("Decoding file...");
             loop {
                 let bytes_read = decoder.read(&mut buffer).await?;
                 if bytes_read == 0 {
@@ -90,16 +91,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 file.write_all(&buffer[..bytes_read]).await?;
             }
+            println!("Decoding done");
         }
 
         // Create Tables & insert data
         let mut schemas: Vec<String> = Vec::new();
+        let mut table_names: Vec<String> = Vec::new();
         let tables_dir = path.clone().join("tables");
-        println!("tables_dir: {:?}", tables_dir);
 
         for table in read_dir(tables_dir)? {
             let table = table?.path();
-            println!("table file: {:?}", table);
             let schema_content = tokio::fs::read_to_string(&table).await?;
             conn.execute_batch(&schema_content)?;
             schemas.push(schema_content);
@@ -109,6 +110,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .and_then(|name| name.to_str())
                 .map(|name| name.split('.').next().unwrap())
                 .unwrap();
+            table_names.push(table_name.to_string());
             let csv_file_path = path.clone().join(format!("{}.csv", table_name));
             let copy_command = format!(
                 "COPY \"{}\" FROM '{}' (DELIMITER '|', HEADER FALSE, NULL 'null');",
@@ -156,8 +158,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             let mut query_file = File::create(&query_filename).await?;
             query_file.write_all(explanation.as_bytes()).await?;
-
-            println!("Query explanation saved to '{}'", query_filename);
 
             let system_prompt = tokio::fs::read_to_string("system_prompt.txt").await?;
 
@@ -232,15 +232,48 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .as_bytes()).await?;
             result_file.flush().await?;
         }
-        break;
-    }
+        // Delete csv and bz2 files
+        let mut entries = tokio::fs::read_dir(&path).await?;
 
-    for database in &database_names {
-        println!("{}", database);
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+
+            if !path.is_file() {
+                continue;
+            }
+
+            if let Some(extension) = path.extension() {
+                if extension != "csv" && extension != "bz2" {
+                    continue;
+                }
+
+                println!("Deleting file: {:?}", path);
+                tokio::fs::remove_file(path).await?;
+            }
+
+        }
+
+        // Drop tables
+        for table_name in table_names {
+            println!("Droping Table: {}", table_name);
+            let drop_table_query = format!("DROP TABLE IF EXISTS {}", table_name);
+            conn.execute(&drop_table_query, [])?;
+        }
+
+        // Update index;
+        let mut index_file = OpenOptions::new()
+            .write(true)
+            .open("index.txt")
+            .await?;
+
+        index_file.write_u32(index).await?;
+        index_file.flush().await?;
     }
 
     Ok(())
 }
+
+
 
 #[derive(Deserialize, Debug)]
 struct StrucuturedResponse {
